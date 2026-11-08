@@ -1,0 +1,13 @@
+{
+  "$schema": "../../schema/plugin.schema.json",
+  "name": "slack",
+  "version": "0.1.0",
+  "description": "Posts what malha check finds to a Slack channel, through an incoming webhook in SLACK_WEBHOOK_URL or ~/.config/malha/slack-webhook.",
+  "main": "index.js",
+  "permissions": {
+    "fetch": ["POST https://hooks.slack.com/services/*"],
+    "env": ["SLACK_WEBHOOK_URL"],
+    "files": ["~/.config/malha/slack-webhook"]
+  },
+  "notify": { "description": "New and worse findings, and resolved ones, as a message in the webhook's channel" }
+}

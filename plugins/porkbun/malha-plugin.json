@@ -1,0 +1,16 @@
+{
+  "$schema": "../../schema/plugin.schema.json",
+  "name": "porkbun",
+  "version": "0.1.0",
+  "description": "Reads the domains registered at Porkbun: proposes registrar, expiry and auto-renew for each, and adds the ones the file lacks.",
+  "main": "index.js",
+  "permissions": {
+    "fetch": ["POST https://api.porkbun.com/api/json/v3/domain/listAll"],
+    "env": ["PORKBUN_API_KEY", "PORKBUN_SECRET_API_KEY"],
+    "files": ["~/.config/malha/porkbun-api-key", "~/.config/malha/porkbun-secret-api-key", "~/.config/porkbun/api-key", "~/.config/porkbun/secret-api-key"],
+    "topology": "propose"
+  },
+  "commands": {
+    "sync": "Propose registrar, expires and auto_renew for every domain in the Porkbun account. Never removes one."
+  }
+}

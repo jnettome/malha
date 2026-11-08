@@ -1,0 +1,5 @@
+{
+  "name": "malha-plugin-{{name}}",
+  "private": true,
+  "type": "module"
+}

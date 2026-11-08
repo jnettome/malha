@@ -1,0 +1,12 @@
+#!/bin/sh
+# A fake kubectl for tests: answers the read-only calls the kubernetes plugin makes, from files.
+dir="$(dirname "$0")/../kubectl"
+[ "$1" = "--context" ] && shift 2
+case "$*" in
+  "config current-context") echo acme-test ;;
+  "get nodes -o json") cat "$dir/nodes.json" ;;
+  "get ingress -A -o json") cat "$dir/ingress.json" ;;
+  "top nodes --no-headers") cat "$dir/top.txt" ;;
+  "get pods -A --field-selector=status.phase!=Succeeded,status.phase!=Failed -o custom-columns=NODE:.spec.nodeName,NAMESPACE:.metadata.namespace --no-headers") cat "$dir/pods.txt" ;;
+  *) echo "fake kubectl: unexpected arguments: $*" >&2; exit 1 ;;
+esac

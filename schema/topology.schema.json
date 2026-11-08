@@ -1,0 +1,309 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "topology.schema.json",
+  "title": "Infrastructure topology",
+  "description": "Machines, zones, networks, links, apps and data flows. See infra/README.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "meta", "zones", "nodes"],
+  "properties": {
+    "version": { "const": 1 },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "checked"],
+      "properties": {
+        "name": { "type": "string" },
+        "cluster": { "type": "string" },
+        "kubernetes": { "type": "string" },
+        "runtime": { "type": "string" },
+        "checked": { "$ref": "#/definitions/date" },
+        "maintainer": { "type": "string" },
+        "sources": { "type": "array", "items": { "type": "string" } },
+        "pods_sampled": { "$ref": "#/definitions/date", "description": "When the per-app pod counts were sampled." }
+      }
+    },
+    "providers": { "type": "array", "items": { "$ref": "#/definitions/provider" } },
+    "networks": { "type": "array", "items": { "$ref": "#/definitions/network" } },
+    "sites": { "type": "array", "items": { "$ref": "#/definitions/site" } },
+    "zones": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/zone" } },
+    "nodes": { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/node" } },
+    "links": { "type": "array", "items": { "$ref": "#/definitions/link" } },
+    "apps": { "type": "array", "items": { "$ref": "#/definitions/app" } },
+    "domains": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checked", "list"],
+      "properties": {
+        "checked": { "$ref": "#/definitions/date" },
+        "sources": { "type": "array", "items": { "type": "string" } },
+        "list": { "type": "array", "items": { "$ref": "#/definitions/domain" } }
+      }
+    },
+    "flows": { "type": "array", "items": { "$ref": "#/definitions/flow" } },
+    "accepted": {
+      "type": "array",
+      "description": "Findings of malha check that are known and accepted. They stop alerting until `until`.",
+      "items": { "$ref": "#/definitions/accepted" }
+    }
+  },
+  "definitions": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Lowercase id, referenced from links, apps and flows."
+    },
+    "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "endpoint": {
+      "description": "A node id or a zone id, or a list of them.",
+      "oneOf": [
+        { "$ref": "#/definitions/id" },
+        { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/id" } }
+      ]
+    },
+    "notes": {
+      "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+    },
+    "linkKind": {
+      "enum": ["http", "control", "dns", "logs", "metrics", "errors", "storage", "mail", "ci", "certs", "ssh"],
+      "description": "Traffic class. Sets the color and the layer toggle in the viewer."
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "kind"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "type": "string" },
+        "kind": { "enum": ["datacenter", "cloud", "saas", "home"] },
+        "location": { "type": "string" },
+        "asn": { "type": "string" },
+        "network": { "type": "string" },
+        "notes": { "$ref": "#/definitions/notes" }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "kind"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "type": "string" },
+        "kind": { "enum": ["public", "overlay", "private", "lan"] },
+        "cidr": { "type": "string" },
+        "port": { "type": "integer" },
+        "notes": { "$ref": "#/definitions/notes" }
+      }
+    },
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "lat", "lon"],
+      "description": "A physical place, drawn on the Map view.",
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "type": "string" },
+        "region": { "type": "string", "description": "State and country, or a cloud region." },
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+        "notes": { "$ref": "#/definitions/notes", "description": "How the location was established." }
+      }
+    },
+    "zone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "column"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "column": { "type": "integer", "minimum": 0, "description": "Canvas column, left to right." },
+        "row": { "type": "integer", "minimum": 0, "default": 0, "description": "Canvas row, top to bottom." },
+        "stack": {
+          "enum": ["vertical", "horizontal"],
+          "default": "vertical",
+          "description": "How nodes inside the zone are arranged."
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "kind", "zone"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "type": "string" },
+        "kind": {
+          "enum": ["users", "workstation", "proxy", "control-plane", "worker", "server", "saas"],
+          "description": "What the machine is. Sets the card style."
+        },
+        "zone": { "$ref": "#/definitions/id" },
+        "status": { "enum": ["active", "idle", "degraded", "planned", "retired"], "default": "active" },
+        "provider": { "$ref": "#/definitions/id" },
+        "site": {
+          "description": "Site id, or a list for a service in several regions. Leave out when unknown or anycast.",
+          "oneOf": [
+            { "$ref": "#/definitions/id" },
+            { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/id" } }
+          ]
+        },
+        "host": { "type": "string", "description": "DNS name." },
+        "addresses": {
+          "type": "object",
+          "description": "Address per network, e.g. public, wg, lan.",
+          "additionalProperties": { "type": "string" }
+        },
+        "networks": { "type": "array", "items": { "$ref": "#/definitions/id" } },
+        "os": { "type": "string" },
+        "ssh": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "port": { "type": "integer" }, "user": { "type": "string" } }
+        },
+        "hardware": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model": { "type": "string" },
+            "cpu": { "type": "number", "description": "vCPU or hardware threads." },
+            "cpu_model": { "type": "string" },
+            "memory_gib": { "type": "number" },
+            "gpu": { "type": "string" },
+            "max_pods": { "type": "integer" },
+            "disks": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "One sample. Grafana has the live numbers.",
+          "properties": {
+            "cpu_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+            "memory_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+            "pods": { "type": "integer", "minimum": 0 },
+            "sampled": { "$ref": "#/definitions/date" }
+          }
+        },
+        "runs": { "type": "array", "items": { "type": "string" }, "description": "System services on this machine." },
+        "since": { "$ref": "#/definitions/date" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "notes": { "$ref": "#/definitions/notes" },
+        "docs": { "type": "array", "items": { "type": "string" }, "description": "Repo paths with more detail." }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "kind"],
+      "properties": {
+        "from": { "$ref": "#/definitions/endpoint" },
+        "to": { "$ref": "#/definitions/endpoint" },
+        "kind": { "$ref": "#/definitions/linkKind" },
+        "label": { "type": "string" },
+        "ports": { "type": "array", "items": { "type": "integer" } },
+        "via": { "$ref": "#/definitions/id", "description": "Network the traffic rides on." },
+        "status": { "enum": ["active", "inactive"], "default": "active" },
+        "notes": { "$ref": "#/definitions/notes" }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "engine", "nodes"],
+      "properties": {
+        "name": { "type": "string" },
+        "engine": { "enum": ["postgres", "mysql", "redis", "elasticsearch", "tsdb", "other"] },
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/id" },
+          "description": "Nodes holding a replica. One node means the data is offline while that node is."
+        }
+      }
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "category"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "type": "string" },
+        "category": { "enum": ["product", "platform", "internal", "staging"] },
+        "namespace": {
+          "description": "The Kubernetes namespace it runs in, or a list when it spans several (an app and its Redis, say).",
+          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true }]
+        },
+        "domains": { "type": "array", "items": { "type": "string" } },
+        "pods": {
+          "type": "object",
+          "description": "Pod count per node id.",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "host": { "$ref": "#/definitions/id", "description": "For apps outside the cluster: the node they run on." },
+        "databases": { "type": "array", "items": { "$ref": "#/definitions/database" } },
+        "repos": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9.-]+\\.[a-z]+/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$" },
+          "description": "Git remotes the app's images are built from, e.g. gitlab.com/group/project."
+        },
+        "uses": { "type": "array", "items": { "$ref": "#/definitions/id" }, "description": "Node ids this app talks to." },
+        "depends_on": { "type": "array", "items": { "$ref": "#/definitions/id" }, "description": "App ids this app calls." },
+        "notes": { "$ref": "#/definitions/notes" }
+      }
+    },
+    "domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9.-]+\\.[a-z]{2,}$", "description": "Registered domain, e.g. acme.example." },
+        "registrar": { "$ref": "#/definitions/id", "description": "Provider id. Leave out when registered somewhere not listed." },
+        "expires": { "$ref": "#/definitions/date" },
+        "auto_renew": { "type": "boolean", "description": "Renews by itself at the registrar." },
+        "dns": { "$ref": "#/definitions/id", "description": "Provider id of the DNS host." },
+        "plan": { "type": "string", "description": "DNS or CDN plan, e.g. free." },
+        "visitors": { "type": "integer", "minimum": 0, "description": "Unique visitors as the DNS host's dashboard shows them." },
+        "insights": { "type": "integer", "minimum": 0, "description": "Open security insights in the DNS host's dashboard." },
+        "notes": { "$ref": "#/definitions/notes" }
+      }
+    },
+    "accepted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check", "why"],
+      "properties": {
+        "check": {
+          "enum": ["domain-expiry", "domain-untracked", "domain-no-autorenew", "domain-unlisted", "pod-pressure", "node-degraded", "single-node-database", "vulnerability", "scan-stale"]
+        },
+        "subject": { "type": "string", "description": "A domain, node id, app/database, or advisory id. Omit to accept every finding of the check." },
+        "why": { "type": "string", "minLength": 1 },
+        "until": { "$ref": "#/definitions/date" }
+      }
+    },
+    "flow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "kind", "steps"],
+      "properties": {
+        "id": { "$ref": "#/definitions/id" },
+        "name": { "type": "string" },
+        "kind": { "$ref": "#/definitions/linkKind" },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to", "label"],
+            "properties": {
+              "from": { "$ref": "#/definitions/id" },
+              "to": { "$ref": "#/definitions/id" },
+              "label": { "type": "string" },
+              "via": { "$ref": "#/definitions/id" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

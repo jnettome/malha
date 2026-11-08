@@ -1,0 +1,4 @@
+worker-1        2100m       7%     40000Mi     31%
+ip-10-10-0-22   1500m       5%     30000Mi     23%
+worker-4        <unknown>   <unknown>   <unknown>   <unknown>
+cp-1            300m        8%     3000Mi      37%

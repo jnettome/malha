@@ -1,0 +1,42 @@
+name: Release
+
+# Push a tag like v0.5.0 (matching package.json) to publish malha to npm, with provenance, and attach
+# the same package as a .tgz to a GitHub Release. npm takes it through trusted publishing (OIDC), so
+# no npm token is stored anywhere. Setup, and the very first publish: docs/releasing.md.
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the GitHub Release
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci && npm run build
+      - name: Tag matches package.json
+        run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+      - run: npm run typecheck && npm test
+      - run: npx playwright install --with-deps chromium && npm run e2e
+      - name: npm publish (unless this version is already on npm, as the first one is)
+        run: |
+          if npm view "malha@${GITHUB_REF_NAME#v}" version > /dev/null 2>&1; then
+            echo "malha@${GITHUB_REF_NAME#v} is already on npm; not publishing it again."
+          else
+            npm publish
+          fi
+      - name: GitHub Release with the package attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          npm pack
+          # This version's CHANGELOG section as the release notes.
+          awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## " v "$" {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" malha-*.tgz --title "$GITHUB_REF_NAME" --notes-file notes.md

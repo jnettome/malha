@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=./topology.schema.json
+#
+# Your infrastructure in one file. `malha dev` draws it and reloads when you save;
+# `malha validate` checks it. Every field is described in topology.schema.json, so an editor
+# with the YAML language server (VS Code, Cursor) autocompletes as you type.
+
+version: 1
+
+meta:
+  name: My infrastructure
+  checked: 2026-01-01          # when you last confirmed this file matches reality
+
+providers:                     # who hosts things; groups machines into racks on the Fleet tab
+  - { id: cloud, name: My cloud, kind: cloud }
+
+networks:
+  - { id: internet, name: Public internet, kind: public }
+
+# Physical places for the Map tab. lat/lon of the datacenter or region.
+sites:
+  - { id: region-1, name: Region 1, region: Somewhere, lat: 50.11, lon: 8.68 }
+
+# Columns on the Topology canvas, left to right.
+zones:
+  - { id: clients, name: Clients, column: 0 }
+  - { id: servers, name: Servers, column: 1 }
+
+nodes:
+  - id: internet
+    name: Internet
+    kind: users                # users | workstation | proxy | control-plane | worker | server | saas
+    zone: clients
+  - id: web-1
+    name: web-1
+    kind: server
+    zone: servers
+    provider: cloud
+    site: region-1
+    host: web-1.example.com
+    addresses: { public: 203.0.113.10 }
+    hardware: { cpu: 4, memory_gib: 8 }
+    runs: [nginx, app]
+
+# What talks to what, in the direction the data goes.
+links:
+  - { from: internet, to: web-1, kind: http, ports: [443], label: Public HTTPS }
+
+apps:
+  - id: website
+    name: Website
+    category: product
+    domains: [example.com, www.example.com]
+    host: web-1
+    # repos: [github.com/you/website]   # for `malha scan`
+
+domains:
+  checked: 2026-01-01
+  list:
+    - { name: example.com, expires: 2027-01-01, auto_renew: true }
+
+# Findings of malha check you have decided to live with (malha check lists them with the reason):
+# accepted:
+#   - { check: single-node-database, subject: web/web-db, why: Rebuilt from the nightly dump., until: 2027-01-01 }

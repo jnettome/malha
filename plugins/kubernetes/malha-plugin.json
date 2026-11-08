@@ -1,0 +1,24 @@
+{
+  "$schema": "../../schema/plugin.schema.json",
+  "name": "kubernetes",
+  "version": "0.1.2",
+  "description": "Reads a Kubernetes cluster with kubectl: drafts nodes, apps and hostnames into the topology, refreshes pod counts and usage, and shows live CPU, memory and pods per node.",
+  "main": "index.js",
+  "permissions": {
+    "exec": [
+      "kubectl config current-context",
+      "kubectl [--context *] get nodes -o json",
+      "kubectl [--context *] get ingress -A -o json",
+      "kubectl [--context *] get pods -A --field-selector=status.phase!=Succeeded,status.phase!=Failed -o custom-columns=NODE:.spec.nodeName,NAMESPACE:.metadata.namespace --no-headers",
+      "kubectl [--context *] top nodes --no-headers"
+    ],
+    "topology": "propose"
+  },
+  "commands": {
+    "import": "Propose what the cluster has that the file doesn't: node usage and capacity, new nodes, pod counts per app, ingress hostnames, domains. Plugin args: --no-add only updates what is already there"
+  },
+  "live": {
+    "every": 30,
+    "description": "CPU and memory (kubectl top), pods and readiness per node"
+  }
+}

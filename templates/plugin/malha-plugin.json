@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jnettome/malha/main/schema/plugin.schema.json",
+  "name": "{{name}}",
+  "version": "0.1.0",
+  "description": "Say what this plugin does in one sentence.",
+  "main": "index.js",
+  "permissions": {
+    "exec": ["uname -n"],
+    "fetch": [],
+    "files": [],
+    "env": [],
+    "topology": "propose"
+  },
+  "commands": {
+    "hello": "Show what the plugin can see, and propose one small change"
+  }
+}

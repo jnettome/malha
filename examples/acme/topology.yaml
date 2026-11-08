@@ -1,0 +1,262 @@
+# yaml-language-server: $schema=../../schema/topology.schema.json
+#
+# Acme: a fictional company used for Malha's docs, screenshots and tests.
+# Domains use the reserved .example TLD and addresses the documentation ranges (RFC 2606, 5737).
+
+version: 1
+
+meta:
+  name: Acme
+  cluster: acme-prod
+  kubernetes: v1.35.2
+  runtime: containerd 2.3.1
+  checked: 2026-10-01
+  maintainer: Platform team
+  pods_sampled: 2026-10-01
+
+providers:
+  - { id: hetzner, name: Hetzner, kind: datacenter }
+  - { id: aws, name: Amazon Web Services, kind: cloud }
+  - { id: cloudflare, name: Cloudflare, kind: saas }
+  - { id: github, name: GitHub, kind: saas }
+  - { id: porkbun, name: Porkbun, kind: saas }
+  - { id: office, name: Office, kind: home }
+
+networks:
+  - { id: internet, name: Public internet, kind: public }
+  - { id: mesh, name: WireGuard mesh, kind: overlay, cidr: 10.10.0.0/24, port: 51820 }
+  - { id: pods, name: Pod network, kind: overlay, cidr: 10.244.0.0/16 }
+
+sites:
+  - { id: falkenstein, name: Falkenstein, region: "Saxony, Germany", lat: 50.48, lon: 12.37, notes: Hetzner FSN1. }
+  - { id: helsinki, name: Helsinki, region: "Uusimaa, Finland", lat: 60.17, lon: 24.94, notes: Hetzner HEL1. }
+  - { id: us-east-1, name: N. Virginia, region: AWS us-east-1, lat: 39.04, lon: -77.49 }
+
+zones:
+  - { id: clients, name: Clients, column: 0 }
+  - { id: dns, name: DNS, column: 1 }
+  - { id: edge, name: Edge, description: Load balancer on the mesh, column: 2 }
+  - { id: control-plane, name: Control plane, column: 3 }
+  - { id: workers, name: Workers, description: ingress-nginx on every worker, column: 3 }
+  - { id: services, name: Services, column: 4 }
+  - { id: standalone, name: Outside the cluster, column: 0, row: 1, stack: horizontal }
+
+nodes:
+  - { id: internet, name: Internet, kind: users, zone: clients, networks: [internet], notes: Customers of the shop and the API. }
+  - id: laptop
+    name: Ops laptop
+    kind: workstation
+    zone: clients
+    provider: office
+    runs: [kubectl, malha]
+
+  - id: cloudflare
+    name: Cloudflare
+    kind: saas
+    zone: dns
+    provider: cloudflare
+    runs: [DNS for acme.example, cert-manager DNS-01]
+
+  - id: lb
+    name: lb-1
+    kind: proxy
+    zone: edge
+    provider: hetzner
+    site: falkenstein
+    host: lb-1.acme.example
+    addresses: { public: 203.0.113.10, mesh: 10.10.0.100 }
+    networks: [internet, mesh]
+    runs: ["HAProxy :443 → workers", "HAProxy :6443 → control plane"]
+
+  - id: cp1
+    name: cp-1
+    kind: control-plane
+    zone: control-plane
+    provider: hetzner
+    site: falkenstein
+    addresses: { public: 203.0.113.11, mesh: 10.10.0.1 }
+    networks: [internet, mesh]
+    hardware: { cpu: 4, memory_gib: 8, max_pods: 110 }
+    usage: { cpu_pct: 22, memory_pct: 41, pods: 9, sampled: 2026-10-01 }
+    runs: [kube-apiserver, etcd]
+  - id: cp2
+    name: cp-2
+    kind: control-plane
+    zone: control-plane
+    provider: hetzner
+    site: falkenstein
+    addresses: { public: 203.0.113.12, mesh: 10.10.0.2 }
+    networks: [internet, mesh]
+    hardware: { cpu: 4, memory_gib: 8, max_pods: 110 }
+    usage: { cpu_pct: 18, memory_pct: 39, pods: 9, sampled: 2026-10-01 }
+    runs: [kube-apiserver, etcd]
+  - id: cp3
+    name: cp-3
+    kind: control-plane
+    zone: control-plane
+    provider: hetzner
+    site: helsinki
+    addresses: { public: 198.51.100.13, mesh: 10.10.0.3 }
+    networks: [internet, mesh]
+    hardware: { cpu: 4, memory_gib: 8, max_pods: 110 }
+    usage: { cpu_pct: 20, memory_pct: 44, pods: 9, sampled: 2026-10-01 }
+    runs: [kube-apiserver, etcd]
+
+  - id: w1
+    name: worker-1
+    kind: worker
+    zone: workers
+    provider: hetzner
+    site: falkenstein
+    addresses: { public: 203.0.113.21, mesh: 10.10.0.21 }
+    networks: [internet, mesh]
+    hardware: { model: AX102, cpu: 32, memory_gib: 128, max_pods: 110, disks: [2 × 1.9 TB NVMe RAID1] }
+    usage: { cpu_pct: 14, memory_pct: 38, pods: 94, sampled: 2026-10-01 }
+    runs: [ingress-nginx, node-exporter, Prometheus]
+  - id: w2
+    name: worker-2
+    kind: worker
+    zone: workers
+    provider: hetzner
+    site: falkenstein
+    addresses: { public: 203.0.113.22, mesh: 10.10.0.22 }
+    networks: [internet, mesh]
+    hardware: { model: AX102, cpu: 32, memory_gib: 128, max_pods: 110 }
+    usage: { cpu_pct: 11, memory_pct: 33, pods: 71, sampled: 2026-10-01 }
+    runs: [ingress-nginx, node-exporter]
+  - id: w3
+    name: worker-3
+    kind: worker
+    zone: workers
+    provider: hetzner
+    site: helsinki
+    addresses: { public: 198.51.100.23, mesh: 10.10.0.23 }
+    networks: [internet, mesh]
+    hardware: { model: AX52, cpu: 16, memory_gib: 64, max_pods: 110 }
+    usage: { cpu_pct: 9, memory_pct: 27, pods: 48, sampled: 2026-10-01 }
+    runs: [ingress-nginx, node-exporter]
+
+  - id: github
+    name: GitHub
+    kind: saas
+    zone: services
+    provider: github
+    runs: [ghcr.io/acme, Actions]
+  - id: s3
+    name: AWS S3
+    kind: saas
+    zone: services
+    provider: aws
+    site: us-east-1
+    runs: [acme-uploads, acme-backups]
+  - id: ses
+    name: AWS SES
+    kind: saas
+    zone: services
+    provider: aws
+    site: us-east-1
+    runs: [email-smtp.us-east-1.amazonaws.com]
+
+  - id: backup
+    name: backup-1
+    kind: server
+    zone: standalone
+    status: idle
+    provider: hetzner
+    site: helsinki
+    host: backup-1.acme.example
+    addresses: { public: 198.51.100.40 }
+    networks: [internet]
+    hardware: { cpu: 8, memory_gib: 32, disks: [4 × 8 TB HDD RAID6] }
+    runs: [restic server]
+    notes: Receives nightly database dumps. Not on the mesh.
+
+links:
+  - { from: internet, to: cloudflare, kind: dns, label: Resolve acme.example }
+  - { from: internet, to: lb, kind: http, ports: [443], label: Public HTTPS }
+  - { from: lb, to: [w1, w2, w3], kind: http, ports: [443], via: mesh, label: Round-robin to ingress }
+  - { from: laptop, to: lb, kind: control, ports: [6443], label: kubectl }
+  - { from: lb, to: [cp1, cp2, cp3], kind: control, ports: [6443], via: mesh, label: HAProxy → kube-apiserver }
+  - { from: workers, to: lb, kind: control, via: mesh, label: kubelet → API }
+  - { from: cp1, to: [cp2, cp3], kind: control, ports: [2379, 2380], via: mesh, label: etcd peers }
+  - { from: [control-plane, w2, w3], to: w1, kind: metrics, ports: [9100], via: mesh, label: node-exporter → Prometheus }
+  - { from: workers, to: s3, kind: storage, label: Uploads }
+  - { from: workers, to: ses, kind: mail, ports: [587], label: Order emails }
+  - { from: github, to: workers, kind: ci, label: Image pulls from ghcr.io }
+  - { from: workers, to: backup, kind: storage, label: Nightly database dumps }
+  - { from: workers, to: cloudflare, kind: certs, label: DNS-01 TXT records }
+  - { from: laptop, to: [edge, control-plane, workers, standalone], kind: ssh, ports: [22], label: Admin SSH }
+
+apps:
+  - id: shop
+    name: Shop
+    category: product
+    namespace: shop
+    domains: [acme.example, www.acme.example, shop.acme.example]
+    repos: [github.com/acme/storefront]
+    pods: { w1: 6, w2: 4, w3: 3 }
+    databases:
+      - { name: shop-db, engine: postgres, nodes: [w1, w2, w3] }
+      - { name: shop-cache, engine: redis, nodes: [w1, w2] }
+    uses: [s3, ses, github]
+    depends_on: [api]
+  - id: api
+    name: Public API
+    category: product
+    namespace: api
+    domains: [api.acme.example]
+    repos: [github.com/acme/api]
+    pods: { w1: 4, w2: 3, w3: 2 }
+    databases:
+      - { name: api-db, engine: postgres, nodes: [w1, w3] }
+    uses: [s3, github]
+  - id: admin
+    name: Back office
+    category: internal
+    namespace: admin
+    domains: [admin.acme.example]
+    repos: [github.com/acme/backoffice]
+    pods: { w2: 2 }
+    databases:
+      - { name: admin-db, engine: postgres, nodes: [w2] }
+    uses: [github]
+    notes: Its database lives on worker-2 only.
+  - id: status
+    name: Status page
+    category: platform
+    domains: [status.acme-status.example]
+    pods: { w3: 1 }
+  - id: monitoring
+    name: Prometheus + Grafana
+    category: platform
+    namespace: monitoring
+    domains: [grafana.acme.example]
+    databases:
+      - { name: prometheus, engine: tsdb, nodes: [w1] }
+
+domains:
+  checked: 2026-10-01
+  sources: [Porkbun API, Cloudflare API]
+  list:
+    - { name: acme-old.example, registrar: porkbun, expires: 2026-11-20, auto_renew: false, dns: cloudflare, plan: free, visitors: 120, insights: 1, notes: The 2019 brand. Nothing points here any more. }
+    - { name: acme-status.example, registrar: porkbun, expires: 2027-02-14, auto_renew: true, dns: cloudflare, plan: free, visitors: 3400, insights: 0 }
+    - { name: acme.example, registrar: porkbun, expires: 2027-06-30, auto_renew: true, dns: cloudflare, plan: pro, visitors: 184000, insights: 3 }
+
+flows:
+  - id: order
+    name: A customer places an order
+    kind: http
+    steps:
+      - { from: internet, to: cloudflare, label: "DNS: shop.acme.example → lb-1" }
+      - { from: internet, to: lb, label: "TLS on :443 reaches HAProxy" }
+      - { from: lb, to: w2, label: Round-robin to ingress-nginx on worker-2 }
+      - { from: w2, to: w1, label: "ingress-nginx → a shop pod on worker-1", via: pods }
+      - { from: w1, to: ses, label: The order confirmation goes out through SES }
+  - id: deploy
+    name: A deploy from the laptop
+    kind: control
+    steps:
+      - { from: laptop, to: lb, label: "kubectl apply → lb-1:6443" }
+      - { from: lb, to: cp1, label: HAProxy picks a healthy apiserver }
+      - { from: cp1, to: cp3, label: etcd commits the write in both sites }
+      - { from: github, to: w3, label: worker-3 pulls the new image from ghcr.io }

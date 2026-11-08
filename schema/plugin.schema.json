@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/jnettome/malha/schema/plugin.schema.json",
+  "title": "Malha plugin manifest (malha-plugin.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "description", "main", "permissions"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,39}$", "description": "Lowercase; also the CLI command: malha <name> <command>." },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$" },
+    "description": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "main": { "type": "string", "pattern": "^(?!/)(?!.*\\.\\.)[A-Za-z0-9_./-]+\\.(m?js)$", "description": "The entry module, relative to the plugin folder." },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exec": { "type": "array", "items": { "type": "string" }, "description": "Programs it may run, e.g. \"kubectl [--context *] get nodes -o json\". * is one argument that is not a flag; [ ] is optional." },
+        "fetch": { "type": "array", "items": { "type": "string" }, "description": "URLs it may request, e.g. \"GET,POST https://api.example.com/v1/*\"." },
+        "files": { "type": "array", "items": { "type": "string" }, "description": "Files outside its folder it may read, e.g. \"~/.config/example/token\"." },
+        "env": { "type": "array", "items": { "type": "string" }, "description": "Environment variables it may read." },
+        "topology": { "enum": ["none", "read", "propose"], "description": "read: see the topology. propose: also suggest changes, which the user reviews as a diff." }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+      "additionalProperties": { "type": "string", "description": "One line for help." }
+    },
+    "notify": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Present if it exports notify(ctx, report), called by malha check --notify.",
+      "properties": { "description": { "type": "string" } }
+    },
+    "live": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["every"],
+      "properties": {
+        "every": { "type": "integer", "minimum": 5, "maximum": 86400, "description": "Seconds between refreshes while malha dev runs." },
+        "description": { "type": "string" }
+      }
+    }
+  }
+}

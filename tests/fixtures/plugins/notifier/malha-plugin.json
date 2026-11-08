@@ -1,0 +1,8 @@
+{
+  "name": "notifier",
+  "version": "1.0.0",
+  "description": "Test notifier: reports what it was handed, or fails when told to.",
+  "main": "index.js",
+  "permissions": {},
+  "notify": {}
+}

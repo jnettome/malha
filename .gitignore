@@ -1,0 +1,6 @@
+node_modules/
+dist/
+malha-site/
+.malha/
+test-results/
+playwright-report/

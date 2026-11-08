@@ -1,0 +1,7 @@
+{
+  "items": [
+    { "metadata": { "namespace": "shop" }, "spec": { "rules": [{ "host": "shop.acme.example" }, { "host": "beta.shop.acme.example" }] } },
+    { "metadata": { "namespace": "api" }, "spec": { "rules": [{ "host": "api.acme.example" }, { "host": "api.acme-new.example" }] } },
+    { "metadata": { "namespace": "backoffice" }, "spec": { "rules": [{ "host": "admin.acme.example" }] } }
+  ]
+}

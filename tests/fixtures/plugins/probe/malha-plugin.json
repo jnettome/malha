@@ -1,0 +1,14 @@
+{
+  "name": "probe",
+  "version": "1.0.0",
+  "description": "Test plugin: tries to escape the sandbox, and makes allowed calls through Malha.",
+  "main": "index.js",
+  "permissions": {
+    "exec": ["echo hello [--loud] *"],
+    "fetch": ["GET,POST http://127.0.0.1:5491/ok/*"],
+    "env": ["MALHA_PROBE_TOKEN"],
+    "topology": "propose"
+  },
+  "commands": { "escape": "Try what the sandbox forbids", "allowed": "Use declared permissions", "undeclared": "Run something not declared", "propose": "Suggest a change", "hang": "Never finish" },
+  "live": { "every": 5 }
+}

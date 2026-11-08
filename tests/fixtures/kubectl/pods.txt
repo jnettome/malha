@@ -1,0 +1,10 @@
+worker-1        shop
+worker-1        shop
+worker-1        api
+worker-1        status
+ip-10-10-0-22   shop
+worker-4        shop
+worker-4        ingress-nginx
+cp-1            kube-system
+worker-1        backoffice
+<none>          shop

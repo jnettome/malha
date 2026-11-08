@@ -1,0 +1,88 @@
+{
+  "name": "malha",
+  "version": "0.5.0",
+  "description": "Your infrastructure as one YAML file, drawn as a live map: machines, sites, links, apps, domains and dependency security.",
+  "keywords": [
+    "infrastructure",
+    "topology",
+    "kubernetes",
+    "diagram",
+    "osv",
+    "domains"
+  ],
+  "type": "module",
+  "license": "MIT",
+  "author": "João Pedro Netto",
+  "homepage": "https://github.com/jnettome/malha#readme",
+  "bugs": "https://github.com/jnettome/malha/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jnettome/malha.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "bin": {
+    "malha": "dist/cli/index.js"
+  },
+  "exports": {
+    "./plugin": {
+      "types": "./dist/plugins/sdk.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "schema",
+    "templates",
+    "examples",
+    "plugins",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && tsc -p tsconfig.cli.json && chmod +x dist/cli/index.js",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.cli.json --noEmit",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "malha": "tsx src/cli/index.ts",
+    "release": "node scripts/release.mjs"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
+    "@playwright/test": "1.64.0",
+    "@types/d3-geo": "3.1.1",
+    "@types/d3-selection": "3.0.12",
+    "@types/d3-transition": "3.0.9",
+    "@types/d3-zoom": "3.0.9",
+    "@types/geojson": "7946.0.16",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/topojson-client": "3.1.5",
+    "@vitejs/plugin-react": "6.1.2",
+    "@xyflow/react": "12.12.0",
+    "d3-geo": "3.1.1",
+    "d3-selection": "3.0.0",
+    "d3-transition": "3.0.1",
+    "d3-zoom": "3.0.0",
+    "motion": "14.6.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "topojson-client": "3.1.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.3",
+    "world-atlas": "2.0.2"
+  }
+}

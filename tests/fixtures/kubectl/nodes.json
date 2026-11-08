@@ -1,0 +1,40 @@
+{
+  "items": [
+    {
+      "metadata": { "name": "worker-1", "labels": {} },
+      "status": {
+        "conditions": [{ "type": "Ready", "status": "True" }],
+        "addresses": [{ "type": "InternalIP", "address": "10.10.0.21" }],
+        "capacity": { "cpu": "32", "memory": "131900000Ki", "pods": "110" },
+        "nodeInfo": { "kubeletVersion": "v1.35.4", "containerRuntimeVersion": "containerd://2.3.1" }
+      }
+    },
+    {
+      "metadata": { "name": "ip-10-10-0-22", "labels": {} },
+      "status": {
+        "conditions": [{ "type": "Ready", "status": "False" }],
+        "addresses": [{ "type": "InternalIP", "address": "10.10.0.22" }],
+        "capacity": { "cpu": "32", "memory": "131900000Ki", "pods": "110" },
+        "nodeInfo": { "kubeletVersion": "v1.35.4", "containerRuntimeVersion": "containerd://2.3.1" }
+      }
+    },
+    {
+      "metadata": { "name": "worker-4", "labels": {} },
+      "status": {
+        "conditions": [{ "type": "Ready", "status": "True" }],
+        "addresses": [{ "type": "InternalIP", "address": "10.10.0.24" }, { "type": "ExternalIP", "address": "203.0.113.24" }],
+        "capacity": { "cpu": "16", "memory": "65000000Ki", "pods": "110" },
+        "nodeInfo": { "kubeletVersion": "v1.35.4", "containerRuntimeVersion": "containerd://2.3.1" }
+      }
+    },
+    {
+      "metadata": { "name": "cp-1", "labels": { "node-role.kubernetes.io/control-plane": "" } },
+      "status": {
+        "conditions": [{ "type": "Ready", "status": "True" }],
+        "addresses": [{ "type": "InternalIP", "address": "10.10.0.1" }],
+        "capacity": { "cpu": "4", "memory": "8000000Ki", "pods": "110" },
+        "nodeInfo": { "kubeletVersion": "v1.35.4", "containerRuntimeVersion": "containerd://2.3.1" }
+      }
+    }
+  ]
+}

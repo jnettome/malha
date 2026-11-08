@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  # The CLI promises Node 20.19+; build with the pinned Node, run it on the oldest supported one.
+  node-20:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci && npm run build
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20.19
+      - run: node dist/cli/index.js validate examples/acme/topology.yaml
+      - run: node dist/cli/index.js build examples/acme/topology.yaml --out /tmp/site
+      - run: node dist/cli/index.js init /tmp/init && node dist/cli/index.js validate /tmp/init/topology.yaml
+      - run: node dist/cli/index.js check examples/acme/topology.yaml --fail-on none
+      # Plugins under Node 20's --experimental-permission: a proposal, and no way out of the sandbox.
+      - run: |
+          mkdir /tmp/plugins && cp examples/acme/topology.yaml /tmp/plugins/
+          node dist/cli/index.js plugin add tests/fixtures/plugins/probe /tmp/plugins/topology.yaml --yes
+          node dist/cli/index.js probe propose /tmp/plugins/topology.yaml --dry-run | grep 'pods: 42'
+          node dist/cli/index.js probe escape /tmp/plugins/topology.yaml | tee /tmp/escape.txt
+          ! grep -q ALLOWED /tmp/escape.txt
