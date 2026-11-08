@@ -5,6 +5,7 @@ A plugin teaches Malha about something it doesn't know: your cluster, your cloud
 - **Commands** read the outside world and **propose changes** to `topology.yaml`. You see them as a diff, and nothing is written until you say yes. `malha kubernetes import` drafts nodes, apps and hostnames from a cluster.
 - **Live data** refreshes the open viewer while `malha dev` runs. The `kubernetes` plugin shows CPU, memory and pods per node, every 30 seconds.
 - **Notifiers** deliver what `malha check --notify` finds. The `discord` and `slack` plugins post it to a channel.
+- **Analytics** plugins read traffic for `malha analytics refresh` and the Traffic tab: `umami`, `google` (GA4 and Search Console) and `posthog`.
 
 Plugin code runs in a sandbox, and everything it does outside its own folder is a request that Malha checks against what the plugin declared, then asks you about, the way Claude Code asks before it runs a command.
 
@@ -143,13 +144,14 @@ Run `malha plugin add` again after every change to the code: the hash changed, s
 | `name` | Lowercase letters, digits and dashes. It is also the command: `malha <name> <command>`. Malha's own command names are refused. |
 | `main` | The entry module, relative to the folder. ES module syntax; add `{ "type": "module" }` in a `package.json`, or use `.mjs`. |
 | `permissions.exec` | Programs it may run. The first word is a program on the user's PATH (not a path). Each following word must match one argument exactly; `*` matches one argument that does not start with `-`; `[ ]` makes the words inside optional. |
-| `permissions.fetch` | URLs it may request: exact scheme, host and port, `*.` in front of the host for subdomains, `*` in the path for anything. GET and HEAD unless methods are listed in front. Redirects are returned, not followed, so each hop is checked. |
+| `permissions.fetch` | URLs it may request: exact scheme, host and port, `*.` in front of the host for subdomains, `*` in the path for anything. GET and HEAD unless methods are listed in front. Redirects are returned, not followed, so each hop is checked. The whole host may be `{options.<key>}`, for servers each project names (a self-hosted Umami): it is filled from `malha.plugins.json`, one origin or a list of them, nothing but scheme, host and port, and the person approves the filled-in pattern. |
 | `permissions.files` | Files outside its folder it may read: absolute or `~/`; `*` within a path segment, `**` across segments. |
 | `permissions.env` | Environment variables it may read, by exact name. |
 | `permissions.topology` | `none`, `read` (it gets the parsed topology), or `propose` (also returns changes). |
 | `commands` | Each command it exports, with a line for help. |
 | `live` | Present if it exports `live()`; `every` is seconds between refreshes (5 to 86400). |
 | `notify` | Present if it exports `notify()`; `description` is shown when it is added. |
+| `analytics` | Present if it exports `analytics()` (and, optionally, `link()`); `providers` lists the ones it reads (`umami`, `ga4`, `posthog`, `search-console`). |
 
 The schema is `schema/plugin.schema.json`; the `$schema` line in the template gives editors autocomplete.
 
@@ -237,6 +239,12 @@ export default {
 
 Declare `"notify": {}` in the manifest, and a `fetch` pattern for exactly the service it posts to. Malha marks findings as announced only when at least one notifier returns `sent: true`.
 
+### Analytics
+
+`analytics(ctx, request)` gets `{ range, previous, timezone, sources }`: whole days ending yesterday, the same number of days before, and the sources it serves, each `{ app, provider, id, host?, hostnames }`. It returns `{ results }`, one per source: `{ app, provider, id, ok, error?, totals, previous, series, top }`, or `search` for Search Console. The shapes are `SourceResult` in `malha/plugin`; Malha keeps only the sources it asked for and well-formed numbers.
+
+`link(ctx, { trackers })` gets what `malha analytics detect` found on each app's pages (Umami website ids and script URLs, GA4 measurement ids, Tag Manager containers, PostHog keys and hosts, and the app's hostnames) and returns `{ sources: [{ app, source }], notes }`: the sources those trackers are, and lines about anything it could not match.
+
 ### Dependencies
 
 Malha never runs `npm install` for a plugin: install scripts would run outside the sandbox. Write plain JavaScript, or bundle dependencies into the folder (esbuild or Rollup into one file is simplest). Symlinks are refused, because the permission model would follow them out of the folder, so a pnpm-style `node_modules` will not work.
@@ -288,3 +296,13 @@ Credentials: `PORKBUN_API_KEY` and `PORKBUN_SECRET_API_KEY` (or `~/.config/malha
 ## The `discord` and `slack` plugins
 
 Notifiers for `malha check --notify`: the findings by area (at most ten vulnerabilities, then a count), the resolved ones, and the command to see everything. The webhook comes from `DISCORD_WEBHOOK_URL` or `~/.config/malha/discord-webhook` (`SLACK_WEBHOOK_URL`, `~/.config/malha/slack-webhook`), and must be on Discord's (or Slack's) own host. Discord messages are split at 2000 characters and never mention anyone. Setting them up, and running the check daily: [docs/checks.md](checks.md).
+
+## The `umami`, `google` and `posthog` plugins
+
+They read traffic for `malha analytics refresh` and the Traffic tab, and match trackers for `malha analytics detect`. Setup for each, and what their numbers mean: [analytics.md](analytics.md).
+
+| Plugin | Reads | Credentials |
+| --- | --- | --- |
+| `umami` | Umami Cloud, or your servers (`options.hosts`) | `UMAMI_API_KEY`, or `UMAMI_USERNAME` and `UMAMI_PASSWORD`, or `~/.config/malha/umami.json` per host |
+| `google` | GA4 and Search Console | A service account's JSON key: `GOOGLE_SERVICE_ACCOUNT` or `~/.config/malha/google-service-account.json` |
+| `posthog` | PostHog Cloud or your instance (`options.hosts`) | `POSTHOG_PERSONAL_API_KEY` or `~/.config/malha/posthog-key` |

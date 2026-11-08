@@ -39,8 +39,13 @@ It exits 1 when there is a critical finding. `--fail-on warning` also fails on w
 | `single-node-database` | `app/database` | every replica on one node | | |
 | `vulnerability` | advisory id | high (with `--vulns high`) | critical | the severity |
 | `scan-stale` | `scan` | the last scan is over two weeks old | | each further two weeks |
+| `traffic-drop` | app id, or `app/search` | visitors (or search clicks) down by half against the previous period | visitors down by four fifths, or none for the last two days | 50, 80, silent |
+| `analytics-error` | `app/provider` | a source failed in the last `malha analytics refresh` | | |
+| `analytics-stale` | `analytics` | traffic was last fetched over three days ago | | 3, 14 |
 
 A domain "serves something" when an app lists one of its hostnames or a machine's `host` is in it. A domain that serves nothing and has expired is not a finding: you most likely let it go (`malha validate` still mentions it).
+
+Traffic checks read `.malha/analytics.json`, from `malha analytics refresh` ([analytics.md](analytics.md)); a drop counts only when the previous period had at least 50 visitors (or clicks).
 
 Vulnerabilities come from `.malha/scan.json`, written by `malha scan`. Each advisory is one finding across every repo that ships it (development-only dependencies don't count), most widespread first. The terminal shows ten; `--json` and the Security tab of `malha dev` have all of them.
 

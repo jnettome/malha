@@ -1,5 +1,5 @@
 import { execFileSync, type ChildProcess } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { CLI, collectErrors, copyExample, devServer, EXAMPLE, overflowing, staticServer } from './helpers.ts'
@@ -10,6 +10,7 @@ const TABS = [
   { name: 'Fleet', ready: '.rack' },
   { name: 'Products', ready: '.matrix tbody tr' },
   { name: 'Domains', ready: '.dom__row:not(.dom__row--head)' },
+  { name: 'Traffic', ready: '.traffic h1' },
   { name: 'Security', ready: '.security h1' },
 ]
 
@@ -127,5 +128,50 @@ test('a live plugin asks in the page, and its numbers replace the samples', asyn
     expect(errors).toEqual([])
   } finally {
     server.kill()
+  }
+})
+
+test('the Traffic tab shows every site, its trend, and what could not be read', async ({ page, isMobile }) => {
+  const { dir, file } = copyExample()
+  mkdirSync(join(dir, '.malha'))
+  copyFileSync('tests/fixtures/analytics.json', join(dir, '.malha', 'analytics.json'))
+  const port = isMobile ? 5417 : 5416
+  const server = await devServer(file, port)
+  try {
+    const errors = collectErrors(page)
+    await page.goto(`http://127.0.0.1:${port}/#traffic`)
+    await expect(page.locator('.traffic h1')).toHaveText(/visitors across 3 sites in 30 days/)
+    await expect(page.locator('.tsite:not(.tsite--head)')).toHaveCount(4)
+    await expect(page.locator('.tsite:not(.tsite--head)').first()).toContainText('Shop')
+    // The drop the checks flag is flagged here too.
+    await expect(page.locator('.tsite', { hasText: 'Status page' }).locator('.delta--warn')).toBeVisible()
+    await expect(page.locator('.tpanel--notice')).toContainText('no login for https://umami.acme.example')
+    if (!isMobile) {
+      const spark = await page.locator('.spark').first().boundingBox()
+      await page.mouse.move(spark!.x + spark!.width / 2, spark!.y + spark!.height / 2)
+      await expect(page.locator('.chart__tip').first()).toHaveText(/Oct \d+ · [\d,]+ visitors/)
+    }
+    await page.locator('.tsite', { hasText: 'Shop' }).click()
+    await expect(page.locator('.insp__section', { hasText: 'Traffic · 30 days' })).toContainText('Google Analytics 312345678')
+    expect(await overflowing(page)).toEqual([])
+    expect(errors).toEqual([])
+  } finally {
+    server.kill()
+  }
+})
+
+test('a static build carries the traffic', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'desktop covers it')
+  const { dir, file } = copyExample()
+  mkdirSync(join(dir, '.malha'))
+  copyFileSync('tests/fixtures/analytics.json', join(dir, '.malha', 'analytics.json'))
+  const out = join(dir, 'site')
+  execFileSync(process.execPath, [CLI, 'build', file, '--out', out])
+  const http = await staticServer(out, 5418)
+  try {
+    await page.goto('http://127.0.0.1:5418/#traffic')
+    await expect(page.locator('.tsite:not(.tsite--head)')).toHaveCount(4)
+  } finally {
+    http.close()
   }
 })

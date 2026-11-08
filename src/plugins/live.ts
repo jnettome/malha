@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { readAnalytics, refreshAnalytics } from '../cli/analytics.ts'
 import { loadTopology } from '../cli/load.ts'
 import type { Ask, LiveSnapshot, PluginStatus } from '../core/live.ts'
 import { PluginError, runPlugin, Session, type Answer, type Asker } from './host.ts'
@@ -62,7 +63,8 @@ export function createLive(file: string, opts: LiveOptions) {
     push()
   }
 
-  const askerFor = (name: string): Asker => ({
+  /** `key` is the status entry that shows "waiting for you" (the plugin's own, or "analytics"). */
+  const askerFor = (name: string, key = name): Asker => ({
     ask(question) {
       if (!opts.browserApprovals) {
         opts.log(`${name}: needs approval for ${question.detail}. This server is reachable from other machines, so approve in a terminal: malha plugin allow ${name}`)
@@ -70,7 +72,7 @@ export function createLive(file: string, opts: LiveOptions) {
       }
       const id = randomUUID()
       opts.log(`${name} is asking in the browser: ${question.kind} ${question.detail}`)
-      status(name, { state: 'asking', message: `waiting for you to answer in the browser` })
+      status(key, { state: 'asking', message: `waiting for you to answer in the browser` })
       return new Promise<Answer>((resolve) => {
         asks.set(id, { ask: { id, question }, resolve })
         push()
@@ -107,8 +109,39 @@ export function createLive(file: string, opts: LiveOptions) {
     timers.add(timer)
   }
 
+  // Traffic: refresh when it is older than ANALYTICS_EVERY, through the same questions in the page.
+  const ANALYTICS_EVERY = 6 * 3600
+  async function analyticsTick() {
+    if (closed) return
+    const sources = (loadTopology(file).data?.apps ?? []).some((a) => a.analytics?.length)
+    const plugins = loadPlugins(file).filter((p) => p.plugin?.manifest.analytics)
+    if (sources && plugins.length) {
+      const age = (Date.now() - Date.parse(readAnalytics(file)?.fetched ?? '1970-01-01')) / 1000
+      const name = plugins.map((p) => p.name).join(', ')
+      statuses.set('analytics', { name: `traffic (${name})`, every: ANALYTICS_EVERY, state: age < ANALYTICS_EVERY ? 'ok' : 'starting', at: readAnalytics(file)?.fetched })
+      if (age >= ANALYTICS_EVERY) {
+        opts.log(`traffic: refreshing (${name})`)
+        try {
+          const asker: Asker = { ask: (q) => askerFor(q.plugin, 'analytics').ask(q) }
+          const cache = await refreshAnalytics(file, { days: readAnalytics(file)?.days ?? 30, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asker, session, log: (l) => opts.log(`traffic │ ${l}`) })
+          const failed = cache.results.filter((r) => !r.ok).length
+          status('analytics', { state: failed === cache.results.length ? 'error' : 'ok', at: cache.fetched, message: failed ? `${failed} of ${cache.results.length} sources failed; malha analytics shows why` : undefined })
+        } catch (e) {
+          status('analytics', { state: 'error', message: (e as Error).message })
+        }
+      } else push()
+    }
+    if (closed) return
+    const timer = setTimeout(() => {
+      timers.delete(timer)
+      void analyticsTick()
+    }, 15 * 60 * 1000)
+    timers.add(timer)
+  }
+
   void isolation().then((iso) => {
     network = iso.network
+    void analyticsTick()
     for (const entry of loadPlugins(file)) {
       if (!entry.plugin) {
         statuses.set(entry.name, { name: entry.name, every: 0, state: 'error', message: entry.error })
@@ -134,6 +167,7 @@ export function createLive(file: string, opts: LiveOptions) {
       open.resolve(answer)
       const name = open.ask.question.plugin
       if (statuses.get(name)?.state === 'asking') status(name, { state: 'starting', message: undefined })
+      else if (statuses.get('analytics')?.state === 'asking' && ![...asks.values()].length) status('analytics', { state: 'starting', message: undefined })
       else push()
       return true
     },

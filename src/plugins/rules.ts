@@ -137,6 +137,44 @@ export function matchFile(pattern: string, path: string) {
 
 export const matchEnv = (pattern: string, name: string) => pattern === name
 
+// A fetch pattern may take its host from the project's options: "GET {options.hosts}/api/*". The value
+// must be an origin (scheme, host, port; no path, wildcard or credentials), or a list of them, each
+// giving one pattern. The person approves the expanded patterns, so they see the real hosts.
+const TEMPLATE = /\{options\.([A-Za-z0-9_]+)\}/
+const TEMPLATED = /^(?:[A-Z]+(?:,[A-Z]+)*\s+)?\{options\.[A-Za-z0-9_]+\}\/\S*$/
+
+function originOf(value: unknown) {
+  if (typeof value !== 'string') return undefined
+  try {
+    const u = new URL(value)
+    const bare = (u.pathname === '/' || u.pathname === '') && !u.search && !u.hash && !u.username && !u.password
+    return /^https?:$/.test(u.protocol) && bare && !value.includes('*') ? u.origin : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Fill {options.key} in fetch patterns. Patterns whose option is missing or invalid are dropped, with a problem. */
+export function expandPatterns(patterns: string[] = [], options: Record<string, unknown> = {}) {
+  const out: string[] = []
+  const problems: string[] = []
+  for (const pattern of patterns) {
+    const m = pattern.match(TEMPLATE)
+    if (!m) {
+      out.push(pattern)
+      continue
+    }
+    const values = options[m[1]] === undefined ? [] : [options[m[1]]].flat()
+    if (!values.length) problems.push(`${pattern}: set options.${m[1]} in malha.plugins.json`)
+    for (const value of values) {
+      const origin = originOf(value)
+      if (origin) out.push(pattern.replace(m[0], origin))
+      else problems.push(`options.${m[1]}: "${String(value)}" is not an origin like https://analytics.example.com`)
+    }
+  }
+  return { patterns: [...new Set(out)], problems }
+}
+
 /** Check every pattern parses; returns problems as messages. */
 export function checkPatterns(permissions: Partial<Record<Kind, string[]>>) {
   const problems: string[] = []
@@ -148,8 +186,12 @@ export function checkPatterns(permissions: Partial<Record<Kind, string[]>>) {
     }
   }
   for (const p of permissions.fetch ?? []) {
+    if (TEMPLATE.test(p) && !TEMPLATED.test(p)) {
+      problems.push(`fetch pattern "${p}": {options.…} must be the whole host, right after the methods`)
+      continue
+    }
     try {
-      parseFetch(p)
+      parseFetch(p.replace(TEMPLATE, 'https://options.invalid'))
     } catch (e) {
       problems.push((e as Error).message)
     }

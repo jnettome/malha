@@ -13,6 +13,7 @@ Your infrastructure as one YAML file, drawn as a live map.
 | Fleet | One rack per provider, machines as sleds sized by their CPU. |
 | Products | Apps against workers: pods per node, database replicas, and databases that live on a single node. |
 | Domains | Every registered domain: registrar, DNS, expiry with days left, a renewal calendar, and what each domain serves. |
+| Traffic | Every site's visitors and search traffic in one place, from Umami, Google Analytics, PostHog and Search Console: trends, changes, top pages, referrers and queries. |
 | Security | Known vulnerabilities in the dependencies of every app, from a `malha scan`. |
 
 ![The Map tab: Acme's sites in Falkenstein, Helsinki and N. Virginia, and the traffic between them](docs/map.png)
@@ -55,6 +56,7 @@ Editors with the YAML language server (VS Code, Cursor) read `topology.schema.js
 | `malha validate [file]` | Checks the schema, every cross-reference and the [standards](#what-validate-checks). Exits 1 on errors. | `--strict` also fails on warnings |
 | `malha build [file]` | A static site with the data inside `index.html`, for any static web server. | `--out malha-site`, `--no-scan` |
 | `malha scan [file]` | Scans the dependencies behind every app. See [Dependency scan](#dependency-scan). | `--code-dir <dir>` (or `$MALHA_CODE_DIR`), `--app <id>` (repeatable), `--no-fetch`, `--offline` |
+| `malha analytics [refresh\|detect] [file]` | Traffic per app, from the analytics plugins. See [Traffic](#traffic). | `--days 30`, `--timezone`, `--dry-run`, `--yes` |
 | `malha check [file]` | What needs a person, by area. Exits 1 on critical findings. See [Checks and alerts](#checks-and-alerts). | `--live`, `--notify`, `--digest`, `--json`, `--fail-on critical\|warning\|none`, `--vulns critical\|high\|medium` |
 | `malha schema [dir]` | Writes `topology.schema.json` for editor autocomplete. | |
 | `malha <plugin> <command> [file]` | Runs a plugin's command and shows the changes it proposes as a diff. See [Plugins](#plugins). | `--dry-run`, `--yes` (write without asking), `-- <plugin args>` |
@@ -261,6 +263,20 @@ Accept what you live with in [`accepted`](#accepted-findings-you-live-with). `--
 
 [docs/checks.md](docs/checks.md) lists every check and level, and how to run it daily: a GitHub Actions workflow, or a timer on your machine.
 
+## Traffic
+
+The Traffic tab puts every site's visitors and search traffic in one place. Plugins read Umami (cloud or self-hosted), Google Analytics 4 and Search Console (one read-only service account), and PostHog (cloud or self-hosted).
+
+```bash
+malha plugin add google infra/topology.yaml    # or umami, posthog
+malha analytics detect infra/topology.yaml     # finds the trackers on each app's pages; proposes its analytics sources
+malha analytics refresh infra/topology.yaml    # the last 30 days, into .malha/analytics.json
+```
+
+![The Traffic tab](docs/traffic.png)
+
+`malha check` flags sites whose traffic falls by half or stops. Setup for each provider, and what each number means: [docs/analytics.md](docs/analytics.md).
+
 ## Domains and DNS
 
 Two plugins keep `domains` in step with your registrar and DNS host, and map DNS onto the rest of the file. They propose changes as a diff, like any plugin, and never remove anything.
@@ -280,7 +296,7 @@ malha cloudflare records infra/topology.yaml   # hostnames for apps, links to ma
 
 ## Plugins
 
-A plugin reads something Malha doesn't know about (a cluster, a cloud account, an API) and proposes changes to `topology.yaml`, feeds live numbers to the open viewer, or delivers `malha check` findings. These ship with Malha: `kubernetes`, `porkbun`, `cloudflare`, `discord` and `slack`.
+A plugin reads something Malha doesn't know about (a cluster, a cloud account, an API) and proposes changes to `topology.yaml`, feeds live numbers to the open viewer, or delivers `malha check` findings. These ship with Malha: `kubernetes`, `porkbun`, `cloudflare`, `umami`, `google`, `posthog`, `discord` and `slack`.
 
 ```bash
 malha plugin add kubernetes infra/topology.yaml   # review what it may do; adds it to malha.plugins.json
@@ -303,6 +319,7 @@ Plugin code runs in a separate Node process that can read only its own folder, w
 | `dev`, `validate`, `build`, `init`, `schema` | None. `dev` listens on 127.0.0.1 unless you pass `--host`. |
 | `scan` | `git fetch` to your own remotes. Package names and versions (not code) go to api.osv.dev, unless `--offline`, which downloads the vulnerability databases instead. |
 | `check` | None, unless `--live` (live plugins) or `--notify` (notifier plugins). |
+| `analytics` | `detect` loads your apps' public home pages and their scripts. `refresh` and the analytics plugins read your providers' APIs with your credentials, read only; only aggregate counts are kept, in `.malha/analytics.json`. |
 | Plugins | Only what each plugin declares and you approve: the programs it may run, the URLs it may fetch, the files and variables it may read. `porkbun` and `cloudflare` call their APIs with your credentials, read only; `discord` and `slack` post to your webhook. `malha plugin log` lists every request. |
 
 ## Why this repository has no history

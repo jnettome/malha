@@ -8,6 +8,7 @@ import { cleanLive } from '../plugins/live.ts'
 import { loadPlugins } from '../plugins/project.ts'
 import type { CheckReport, NotifyResult } from '../plugins/sdk.ts'
 import { c, pluginLine, terminalAsker } from '../plugins/terminal.ts'
+import { readAnalytics } from './analytics.ts'
 import { loadTopology } from './load.ts'
 import { display, scanPath, stateDir } from './paths.ts'
 
@@ -149,7 +150,7 @@ export async function check(file: string, opts: CheckOptions) {
   }
   const live = opts.live ? await liveOnce(file, new Set(data.nodes.map((n) => n.id))) : undefined
   const severities = SEVERITIES.slice(0, SEVERITIES.indexOf(opts.vulns) + 1)
-  const { open, accepted } = applyAccepted(runChecks(data, { scan: readScan(file), live, severities }), data.accepted)
+  const { open, accepted } = applyAccepted(runChecks(data, { scan: readScan(file), live, severities, analytics: readAnalytics(file) }), data.accepted)
   if (opts.json) console.log(JSON.stringify({ project: data.meta.name, open, accepted }, null, 2))
   else print(data.meta.name, open, accepted)
   if (opts.notify || opts.digest) await notify(file, data.meta.name, open, new Set(accepted.map((f) => f.id)), opts.digest)

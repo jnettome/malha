@@ -3,7 +3,7 @@ import { flows } from '../model/model.ts'
 import type { LinkKind } from '../../core/types.ts'
 import { HIDDEN_BY_DEFAULT } from './kinds.ts'
 
-export type View = 'topology' | 'map' | 'fleet' | 'products' | 'domains' | 'security'
+export type View = 'topology' | 'map' | 'fleet' | 'products' | 'domains' | 'traffic' | 'security'
 export type Selection = { type: 'node' | 'app'; id: string }
 export interface FlowState {
   id: string
@@ -14,7 +14,7 @@ export interface FlowState {
 export const STEP_MS = 2800
 export const LAST_STEP_HOLD = 1.6
 
-const VIEWS: View[] = ['topology', 'map', 'fleet', 'products', 'domains', 'security']
+const VIEWS: View[] = ['topology', 'map', 'fleet', 'products', 'domains', 'traffic', 'security']
 const viewFromHash = (): View => {
   const v = location.hash.slice(1) as View
   return VIEWS.includes(v) ? v : 'topology'

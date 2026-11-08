@@ -1,0 +1,16 @@
+{
+  "$schema": "../../schema/plugin.schema.json",
+  "name": "umami",
+  "version": "0.1.0",
+  "description": "Reads visitors, pageviews, top pages, referrers, countries and devices from Umami: Umami Cloud, or your own server.",
+  "main": "index.js",
+  "permissions": {
+    "fetch": ["GET,POST {options.hosts}/api/*", "GET {options.hosts}/v1/*"],
+    "env": ["UMAMI_API_KEY", "UMAMI_USERNAME", "UMAMI_PASSWORD"],
+    "files": ["~/.config/malha/umami.json"]
+  },
+  "analytics": {
+    "providers": ["umami"],
+    "description": "Traffic per website, for malha analytics refresh; detect matches the website ids on your pages"
+  }
+}

@@ -1,0 +1,906 @@
+{
+  "fetched": "2026-10-31T06:00:00.000Z",
+  "days": 30,
+  "range": {
+    "from": "2026-10-01",
+    "to": "2026-10-30"
+  },
+  "previous": {
+    "from": "2026-09-01",
+    "to": "2026-09-30"
+  },
+  "results": [
+    {
+      "app": "shop",
+      "provider": "ga4",
+      "id": "312345678",
+      "ok": true,
+      "totals": {
+        "visitors": 34179,
+        "pageviews": 148345,
+        "sessions": 44433,
+        "bounce_rate": 0.41,
+        "avg_duration": 74
+      },
+      "previous": {
+        "visitors": 30100,
+        "pageviews": 81270,
+        "sessions": 39130
+      },
+      "series": [
+        {
+          "date": "2026-10-01",
+          "visitors": 1584,
+          "pageviews": 4677
+        },
+        {
+          "date": "2026-10-02",
+          "visitors": 1720,
+          "pageviews": 4345
+        },
+        {
+          "date": "2026-10-03",
+          "visitors": 1384,
+          "pageviews": 3764
+        },
+        {
+          "date": "2026-10-04",
+          "visitors": 1266,
+          "pageviews": 3610
+        },
+        {
+          "date": "2026-10-05",
+          "visitors": 1958,
+          "pageviews": 5337
+        },
+        {
+          "date": "2026-10-06",
+          "visitors": 1938,
+          "pageviews": 5391
+        },
+        {
+          "date": "2026-10-07",
+          "visitors": 2009,
+          "pageviews": 5113
+        },
+        {
+          "date": "2026-10-08",
+          "visitors": 1822,
+          "pageviews": 5147
+        },
+        {
+          "date": "2026-10-09",
+          "visitors": 1979,
+          "pageviews": 4814
+        },
+        {
+          "date": "2026-10-10",
+          "visitors": 1429,
+          "pageviews": 3831
+        },
+        {
+          "date": "2026-10-11",
+          "visitors": 1516,
+          "pageviews": 4373
+        },
+        {
+          "date": "2026-10-12",
+          "visitors": 1749,
+          "pageviews": 4736
+        },
+        {
+          "date": "2026-10-13",
+          "visitors": 2130,
+          "pageviews": 5992
+        },
+        {
+          "date": "2026-10-14",
+          "visitors": 2012,
+          "pageviews": 5526
+        },
+        {
+          "date": "2026-10-15",
+          "visitors": 2150,
+          "pageviews": 6332
+        },
+        {
+          "date": "2026-10-16",
+          "visitors": 1907,
+          "pageviews": 4961
+        },
+        {
+          "date": "2026-10-17",
+          "visitors": 1540,
+          "pageviews": 4003
+        },
+        {
+          "date": "2026-10-18",
+          "visitors": 1313,
+          "pageviews": 3386
+        },
+        {
+          "date": "2026-10-19",
+          "visitors": 1967,
+          "pageviews": 5069
+        },
+        {
+          "date": "2026-10-20",
+          "visitors": 2223,
+          "pageviews": 6079
+        },
+        {
+          "date": "2026-10-21",
+          "visitors": 2135,
+          "pageviews": 6249
+        },
+        {
+          "date": "2026-10-22",
+          "visitors": 1819,
+          "pageviews": 4664
+        },
+        {
+          "date": "2026-10-23",
+          "visitors": 2076,
+          "pageviews": 5616
+        },
+        {
+          "date": "2026-10-24",
+          "visitors": 1453,
+          "pageviews": 3655
+        },
+        {
+          "date": "2026-10-25",
+          "visitors": 1635,
+          "pageviews": 3978
+        },
+        {
+          "date": "2026-10-26",
+          "visitors": 2012,
+          "pageviews": 5244
+        },
+        {
+          "date": "2026-10-27",
+          "visitors": 2173,
+          "pageviews": 6420
+        },
+        {
+          "date": "2026-10-28",
+          "visitors": 2109,
+          "pageviews": 5271
+        },
+        {
+          "date": "2026-10-29",
+          "visitors": 2065,
+          "pageviews": 5307
+        },
+        {
+          "date": "2026-10-30",
+          "visitors": 2055,
+          "pageviews": 5455
+        }
+      ],
+      "top": {
+        "pages": [
+          {
+            "key": "/",
+            "value": 21400
+          },
+          {
+            "key": "/products/kettle",
+            "value": 8200
+          },
+          {
+            "key": "/cart",
+            "value": 6100
+          },
+          {
+            "key": "/products/mugs",
+            "value": 4900
+          },
+          {
+            "key": "/checkout",
+            "value": 3300
+          }
+        ],
+        "referrers": [
+          {
+            "key": "google",
+            "value": 14200
+          },
+          {
+            "key": "(direct)",
+            "value": 9100
+          },
+          {
+            "key": "instagram.com",
+            "value": 3800
+          },
+          {
+            "key": "newsletter",
+            "value": 2100
+          },
+          {
+            "key": "bing",
+            "value": 900
+          }
+        ],
+        "countries": [
+          {
+            "key": "Germany",
+            "value": 18100
+          },
+          {
+            "key": "Austria",
+            "value": 5200
+          },
+          {
+            "key": "Switzerland",
+            "value": 4400
+          }
+        ],
+        "devices": [
+          {
+            "key": "mobile",
+            "value": 21800
+          },
+          {
+            "key": "desktop",
+            "value": 11200
+          },
+          {
+            "key": "tablet",
+            "value": 900
+          }
+        ]
+      }
+    },
+    {
+      "app": "shop",
+      "provider": "search-console",
+      "id": "sc-domain:acme.example",
+      "ok": true,
+      "search": {
+        "totals": {
+          "clicks": 9120,
+          "impressions": 251000,
+          "ctr": 0.0363,
+          "position": 8.4
+        },
+        "previous": {
+          "clicks": 8400,
+          "impressions": 236000,
+          "ctr": 0.0356,
+          "position": 8.9
+        },
+        "series": [
+          {
+            "date": "2026-10-01",
+            "clicks": 300,
+            "impressions": 8278
+          },
+          {
+            "date": "2026-10-02",
+            "clicks": 317,
+            "impressions": 8010
+          },
+          {
+            "date": "2026-10-03",
+            "clicks": 334,
+            "impressions": 8212
+          },
+          {
+            "date": "2026-10-04",
+            "clicks": 332,
+            "impressions": 8372
+          },
+          {
+            "date": "2026-10-05",
+            "clicks": 318,
+            "impressions": 8265
+          },
+          {
+            "date": "2026-10-06",
+            "clicks": 310,
+            "impressions": 8420
+          },
+          {
+            "date": "2026-10-07",
+            "clicks": 336,
+            "impressions": 8157
+          },
+          {
+            "date": "2026-10-08",
+            "clicks": 322,
+            "impressions": 8026
+          },
+          {
+            "date": "2026-10-09",
+            "clicks": 315,
+            "impressions": 8116
+          },
+          {
+            "date": "2026-10-10",
+            "clicks": 300,
+            "impressions": 8152
+          },
+          {
+            "date": "2026-10-11",
+            "clicks": 328,
+            "impressions": 8590
+          },
+          {
+            "date": "2026-10-12",
+            "clicks": 287,
+            "impressions": 8537
+          },
+          {
+            "date": "2026-10-13",
+            "clicks": 285,
+            "impressions": 8166
+          },
+          {
+            "date": "2026-10-14",
+            "clicks": 289,
+            "impressions": 7870
+          },
+          {
+            "date": "2026-10-15",
+            "clicks": 340,
+            "impressions": 7998
+          },
+          {
+            "date": "2026-10-16",
+            "clicks": 318,
+            "impressions": 7930
+          },
+          {
+            "date": "2026-10-17",
+            "clicks": 307,
+            "impressions": 8334
+          },
+          {
+            "date": "2026-10-18",
+            "clicks": 288,
+            "impressions": 8630
+          },
+          {
+            "date": "2026-10-19",
+            "clicks": 333,
+            "impressions": 8602
+          },
+          {
+            "date": "2026-10-20",
+            "clicks": 333,
+            "impressions": 8617
+          },
+          {
+            "date": "2026-10-21",
+            "clicks": 326,
+            "impressions": 8048
+          },
+          {
+            "date": "2026-10-22",
+            "clicks": 281,
+            "impressions": 8023
+          },
+          {
+            "date": "2026-10-23",
+            "clicks": 285,
+            "impressions": 7801
+          },
+          {
+            "date": "2026-10-24",
+            "clicks": 317,
+            "impressions": 8008
+          },
+          {
+            "date": "2026-10-25",
+            "clicks": 324,
+            "impressions": 8240
+          },
+          {
+            "date": "2026-10-26",
+            "clicks": 321,
+            "impressions": 8014
+          },
+          {
+            "date": "2026-10-27",
+            "clicks": 333,
+            "impressions": 8012
+          },
+          {
+            "date": "2026-10-28",
+            "clicks": 302,
+            "impressions": 8605
+          },
+          {
+            "date": "2026-10-29",
+            "clicks": 287,
+            "impressions": 8240
+          },
+          {
+            "date": "2026-10-30",
+            "clicks": 280,
+            "impressions": 8622
+          }
+        ],
+        "queries": [
+          {
+            "key": "acme kettle",
+            "clicks": 1820,
+            "impressions": 14100,
+            "ctr": 0.129,
+            "position": 2.1
+          },
+          {
+            "key": "acme",
+            "clicks": 1410,
+            "impressions": 6200,
+            "ctr": 0.227,
+            "position": 1.2
+          },
+          {
+            "key": "electric kettle 1.7l",
+            "clicks": 690,
+            "impressions": 31000,
+            "ctr": 0.022,
+            "position": 9.8
+          },
+          {
+            "key": "acme mugs",
+            "clicks": 420,
+            "impressions": 3900,
+            "ctr": 0.108,
+            "position": 3.4
+          },
+          {
+            "key": "kettle descaling",
+            "clicks": 260,
+            "impressions": 18800,
+            "ctr": 0.014,
+            "position": 12.6
+          }
+        ],
+        "pages": [
+          {
+            "key": "https://acme.example/",
+            "clicks": 4100,
+            "impressions": 41000,
+            "ctr": 0.1,
+            "position": 3.1
+          },
+          {
+            "key": "https://acme.example/products/kettle",
+            "clicks": 2900,
+            "impressions": 88000,
+            "ctr": 0.033,
+            "position": 7.2
+          }
+        ]
+      }
+    },
+    {
+      "app": "admin",
+      "provider": "posthog",
+      "id": "4242",
+      "ok": true,
+      "totals": {
+        "visitors": 661,
+        "pageviews": 2920,
+        "sessions": 859,
+        "bounce_rate": 0.41,
+        "avg_duration": 74
+      },
+      "previous": {
+        "visitors": 900,
+        "pageviews": 2430,
+        "sessions": 1170
+      },
+      "series": [
+        {
+          "date": "2026-10-01",
+          "visitors": 39,
+          "pageviews": 115
+        },
+        {
+          "date": "2026-10-02",
+          "visitors": 34,
+          "pageviews": 100
+        },
+        {
+          "date": "2026-10-03",
+          "visitors": 25,
+          "pageviews": 75
+        },
+        {
+          "date": "2026-10-04",
+          "visitors": 28,
+          "pageviews": 79
+        },
+        {
+          "date": "2026-10-05",
+          "visitors": 36,
+          "pageviews": 91
+        },
+        {
+          "date": "2026-10-06",
+          "visitors": 35,
+          "pageviews": 96
+        },
+        {
+          "date": "2026-10-07",
+          "visitors": 34,
+          "pageviews": 97
+        },
+        {
+          "date": "2026-10-08",
+          "visitors": 40,
+          "pageviews": 113
+        },
+        {
+          "date": "2026-10-09",
+          "visitors": 38,
+          "pageviews": 92
+        },
+        {
+          "date": "2026-10-10",
+          "visitors": 25,
+          "pageviews": 74
+        },
+        {
+          "date": "2026-10-11",
+          "visitors": 25,
+          "pageviews": 70
+        },
+        {
+          "date": "2026-10-12",
+          "visitors": 42,
+          "pageviews": 102
+        },
+        {
+          "date": "2026-10-13",
+          "visitors": 41,
+          "pageviews": 120
+        },
+        {
+          "date": "2026-10-14",
+          "visitors": 42,
+          "pageviews": 125
+        },
+        {
+          "date": "2026-10-15",
+          "visitors": 40,
+          "pageviews": 106
+        },
+        {
+          "date": "2026-10-16",
+          "visitors": 36,
+          "pageviews": 102
+        },
+        {
+          "date": "2026-10-17",
+          "visitors": 30,
+          "pageviews": 79
+        },
+        {
+          "date": "2026-10-18",
+          "visitors": 26,
+          "pageviews": 69
+        },
+        {
+          "date": "2026-10-19",
+          "visitors": 42,
+          "pageviews": 115
+        },
+        {
+          "date": "2026-10-20",
+          "visitors": 37,
+          "pageviews": 103
+        },
+        {
+          "date": "2026-10-21",
+          "visitors": 40,
+          "pageviews": 104
+        },
+        {
+          "date": "2026-10-22",
+          "visitors": 40,
+          "pageviews": 106
+        },
+        {
+          "date": "2026-10-23",
+          "visitors": 35,
+          "pageviews": 91
+        },
+        {
+          "date": "2026-10-24",
+          "visitors": 31,
+          "pageviews": 93
+        },
+        {
+          "date": "2026-10-25",
+          "visitors": 28,
+          "pageviews": 82
+        },
+        {
+          "date": "2026-10-26",
+          "visitors": 42,
+          "pageviews": 106
+        },
+        {
+          "date": "2026-10-27",
+          "visitors": 39,
+          "pageviews": 97
+        },
+        {
+          "date": "2026-10-28",
+          "visitors": 38,
+          "pageviews": 104
+        },
+        {
+          "date": "2026-10-29",
+          "visitors": 40,
+          "pageviews": 119
+        },
+        {
+          "date": "2026-10-30",
+          "visitors": 38,
+          "pageviews": 95
+        }
+      ],
+      "top": {
+        "pages": [
+          {
+            "key": "/orders",
+            "value": 1900
+          },
+          {
+            "key": "/customers",
+            "value": 700
+          },
+          {
+            "key": "/refunds",
+            "value": 240
+          }
+        ],
+        "referrers": [
+          {
+            "key": "(direct)",
+            "value": 1100
+          }
+        ],
+        "countries": [
+          {
+            "key": "DE",
+            "value": 940
+          }
+        ],
+        "devices": [
+          {
+            "key": "Desktop",
+            "value": 960
+          }
+        ]
+      }
+    },
+    {
+      "app": "status",
+      "provider": "umami",
+      "id": "7b8f1c2e-5a44-4d1e-9c3a-2f6e8d0b1a55",
+      "ok": true,
+      "totals": {
+        "visitors": 1737,
+        "pageviews": 7511,
+        "sessions": 2258,
+        "bounce_rate": 0.41,
+        "avg_duration": 74
+      },
+      "previous": {
+        "visitors": 4300,
+        "pageviews": 11610,
+        "sessions": 5590
+      },
+      "series": [
+        {
+          "date": "2026-10-01",
+          "visitors": 138,
+          "pageviews": 345
+        },
+        {
+          "date": "2026-10-02",
+          "visitors": 143,
+          "pageviews": 388
+        },
+        {
+          "date": "2026-10-03",
+          "visitors": 98,
+          "pageviews": 265
+        },
+        {
+          "date": "2026-10-04",
+          "visitors": 101,
+          "pageviews": 264
+        },
+        {
+          "date": "2026-10-05",
+          "visitors": 137,
+          "pageviews": 331
+        },
+        {
+          "date": "2026-10-06",
+          "visitors": 121,
+          "pageviews": 330
+        },
+        {
+          "date": "2026-10-07",
+          "visitors": 115,
+          "pageviews": 326
+        },
+        {
+          "date": "2026-10-08",
+          "visitors": 115,
+          "pageviews": 292
+        },
+        {
+          "date": "2026-10-09",
+          "visitors": 123,
+          "pageviews": 327
+        },
+        {
+          "date": "2026-10-10",
+          "visitors": 75,
+          "pageviews": 215
+        },
+        {
+          "date": "2026-10-11",
+          "visitors": 88,
+          "pageviews": 260
+        },
+        {
+          "date": "2026-10-12",
+          "visitors": 122,
+          "pageviews": 343
+        },
+        {
+          "date": "2026-10-13",
+          "visitors": 120,
+          "pageviews": 290
+        },
+        {
+          "date": "2026-10-14",
+          "visitors": 112,
+          "pageviews": 309
+        },
+        {
+          "date": "2026-10-15",
+          "visitors": 108,
+          "pageviews": 317
+        },
+        {
+          "date": "2026-10-16",
+          "visitors": 89,
+          "pageviews": 221
+        },
+        {
+          "date": "2026-10-17",
+          "visitors": 63,
+          "pageviews": 155
+        },
+        {
+          "date": "2026-10-18",
+          "visitors": 61,
+          "pageviews": 147
+        },
+        {
+          "date": "2026-10-19",
+          "visitors": 95,
+          "pageviews": 282
+        },
+        {
+          "date": "2026-10-20",
+          "visitors": 83,
+          "pageviews": 206
+        },
+        {
+          "date": "2026-10-21",
+          "visitors": 81,
+          "pageviews": 227
+        },
+        {
+          "date": "2026-10-22",
+          "visitors": 79,
+          "pageviews": 211
+        },
+        {
+          "date": "2026-10-23",
+          "visitors": 91,
+          "pageviews": 241
+        },
+        {
+          "date": "2026-10-24",
+          "visitors": 59,
+          "pageviews": 169
+        },
+        {
+          "date": "2026-10-25",
+          "visitors": 54,
+          "pageviews": 143
+        },
+        {
+          "date": "2026-10-26",
+          "visitors": 66,
+          "pageviews": 168
+        },
+        {
+          "date": "2026-10-27",
+          "visitors": 76,
+          "pageviews": 227
+        },
+        {
+          "date": "2026-10-28",
+          "visitors": 63,
+          "pageviews": 186
+        },
+        {
+          "date": "2026-10-29",
+          "visitors": 66,
+          "pageviews": 163
+        },
+        {
+          "date": "2026-10-30",
+          "visitors": 59,
+          "pageviews": 163
+        }
+      ],
+      "top": {
+        "pages": [
+          {
+            "key": "/",
+            "value": 3100
+          },
+          {
+            "key": "/incidents/2026-10-14",
+            "value": 900
+          }
+        ],
+        "referrers": [
+          {
+            "key": "acme.example",
+            "value": 1700
+          },
+          {
+            "key": "(direct)",
+            "value": 1200
+          }
+        ],
+        "countries": [
+          {
+            "key": "DE",
+            "value": 2100
+          },
+          {
+            "key": "AT",
+            "value": 600
+          }
+        ],
+        "devices": [
+          {
+            "key": "desktop",
+            "value": 1900
+          },
+          {
+            "key": "mobile",
+            "value": 1100
+          }
+        ]
+      }
+    },
+    {
+      "app": "monitoring",
+      "provider": "umami",
+      "id": "0d6f3b1a-0000-4c2b-8e7f-3a9b2c1d4e5f",
+      "ok": false,
+      "error": "no login for https://umami.acme.example: set UMAMI_USERNAME and UMAMI_PASSWORD"
+    }
+  ]
+}

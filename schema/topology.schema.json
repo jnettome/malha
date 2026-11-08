@@ -248,6 +248,21 @@
         },
         "uses": { "type": "array", "items": { "$ref": "#/definitions/id" }, "description": "Node ids this app talks to." },
         "depends_on": { "type": "array", "items": { "$ref": "#/definitions/id" }, "description": "App ids this app calls." },
+        "analytics": {
+          "type": "array",
+          "description": "Where the app's traffic is measured. malha analytics detect proposes these; malha analytics refresh reads them.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["provider", "id"],
+            "properties": {
+              "provider": { "enum": ["umami", "ga4", "posthog", "search-console"] },
+              "id": { "type": ["string", "integer"], "description": "Umami website id, GA4 property id, PostHog project id, or Search Console property (sc-domain:example.com or https://www.example.com/)." },
+              "host": { "type": "string", "pattern": "^https?://[^/\\s]+$", "description": "The provider's server, for self-hosted Umami or PostHog." },
+              "primary": { "type": "boolean", "description": "The source the Traffic tab counts, when the app has several." }
+            }
+          }
+        },
         "notes": { "$ref": "#/definitions/notes" }
       }
     },
@@ -273,7 +288,7 @@
       "required": ["check", "why"],
       "properties": {
         "check": {
-          "enum": ["domain-expiry", "domain-untracked", "domain-no-autorenew", "domain-unlisted", "pod-pressure", "node-degraded", "single-node-database", "vulnerability", "scan-stale"]
+          "enum": ["domain-expiry", "domain-untracked", "domain-no-autorenew", "domain-unlisted", "pod-pressure", "node-degraded", "single-node-database", "vulnerability", "scan-stale", "traffic-drop", "analytics-error", "analytics-stale"]
         },
         "subject": { "type": "string", "description": "A domain, node id, app/database, or advisory id. Omit to accept every finding of the check." },
         "why": { "type": "string", "minLength": 1 },

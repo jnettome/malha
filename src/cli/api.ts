@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { basename, dirname } from 'node:path'
 import { createLive, type Live } from '../plugins/live.ts'
 import { loadTopology, type Loaded } from './load.ts'
+import { analyticsPath } from './analytics.ts'
 import { display, scanPath } from './paths.ts'
 
 export interface Api {
@@ -63,9 +64,10 @@ export function createApi(file: string, opts: ApiOptions = {}): Api {
   }
   watchFor(file)
   watchFor(scan)
+  watchFor(analyticsPath(file))
   // .malha/ may not exist until the first scan; watch its parent for its creation too.
   // Plugins also create it (for approvals and their log); only a scan matters here.
-  if (!existsSync(dirname(scan))) watchers.push(watch(dirname(file), (_e, name) => name === '.malha' && existsSync(scan) && notify()))
+  if (!existsSync(dirname(scan))) watchers.push(watch(dirname(file), (_e, name) => name === '.malha' && (existsSync(scan) || existsSync(analyticsPath(file))) && notify()))
 
   const json = (res: ServerResponse, status: number, body: unknown) => {
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -124,6 +126,11 @@ export function createApi(file: string, opts: ApiOptions = {}): Api {
       if (path === 'api/scan.json') {
         // No scan yet is a normal state, not an error: answer null.
         json(res, 200, existsSync(scan) ? readFileSync(scan, 'utf8') : 'null')
+        return true
+      }
+      if (path === 'api/analytics.json') {
+        const traffic = analyticsPath(file)
+        json(res, 200, existsSync(traffic) ? readFileSync(traffic, 'utf8') : 'null')
         return true
       }
       if (path === 'api/live.json') {

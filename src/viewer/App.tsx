@@ -6,6 +6,7 @@ import { MapView } from './map/MapView.tsx'
 import { ProductsView } from './products/ProductsView.tsx'
 import { SecurityView } from './security/SecurityView.tsx'
 import { TopologyView } from './topology/TopologyView.tsx'
+import { TrafficView } from './traffic/TrafficView.tsx'
 import { Header, Stats } from './ui/Header.tsx'
 import { Consent } from './ui/Consent.tsx'
 import { Inspector } from './ui/Inspector.tsx'
@@ -14,7 +15,7 @@ import { meta } from './model/model.ts'
 
 document.title = `${meta.name} · Malha`
 
-const VIEWS = { topology: TopologyView, map: MapView, fleet: FleetView, products: ProductsView, domains: DomainsView, security: SecurityView }
+const VIEWS = { topology: TopologyView, map: MapView, fleet: FleetView, products: ProductsView, domains: DomainsView, traffic: TrafficView, security: SecurityView }
 
 function Shell() {
   const ui = useUi()

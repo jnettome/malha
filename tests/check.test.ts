@@ -11,6 +11,7 @@ import type { Topology } from '../src/core/types.ts'
 import { addPlugin } from '../src/plugins/commands.ts'
 import { applyChanges, checkChanges } from '../src/plugins/edit.ts'
 import { runPlugin, type Answer, type Question } from '../src/plugins/host.ts'
+import { expandPatterns } from '../src/plugins/rules.ts'
 import { inspect, readProject, writeProject, type Resolved } from '../src/plugins/project.ts'
 import type { CheckReport, CommandResult, NotifyResult } from '../src/plugins/sdk.ts'
 
@@ -28,7 +29,8 @@ function scratch() {
 
 const resolved = (dir: string, options: Record<string, unknown> = {}): Resolved => {
   const { manifest, integrity, files } = inspect(dir)
-  return { name: manifest.name, dir, builtin: false, manifest, integrity, files, entry: { source: dir, options } }
+  const { patterns, problems } = expandPatterns(manifest.permissions.fetch, options)
+  return { name: manifest.name, dir, builtin: false, manifest: { ...manifest, permissions: { ...manifest.permissions, fetch: patterns } }, integrity, files, entry: { source: dir, options }, warnings: problems }
 }
 
 function asker(answer: Answer = 'once') {

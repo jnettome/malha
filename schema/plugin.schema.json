@@ -16,7 +16,7 @@
       "additionalProperties": false,
       "properties": {
         "exec": { "type": "array", "items": { "type": "string" }, "description": "Programs it may run, e.g. \"kubectl [--context *] get nodes -o json\". * is one argument that is not a flag; [ ] is optional." },
-        "fetch": { "type": "array", "items": { "type": "string" }, "description": "URLs it may request, e.g. \"GET,POST https://api.example.com/v1/*\"." },
+        "fetch": { "type": "array", "items": { "type": "string" }, "description": "URLs it may request, e.g. \"GET,POST https://api.example.com/v1/*\". The host may be {options.<key>}, filled from malha.plugins.json: one origin, or a list of them." },
         "files": { "type": "array", "items": { "type": "string" }, "description": "Files outside its folder it may read, e.g. \"~/.config/example/token\"." },
         "env": { "type": "array", "items": { "type": "string" }, "description": "Environment variables it may read." },
         "topology": { "enum": ["none", "read", "propose"], "description": "read: see the topology. propose: also suggest changes, which the user reviews as a diff." }
@@ -26,6 +26,16 @@
       "type": "object",
       "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
       "additionalProperties": { "type": "string", "description": "One line for help." }
+    },
+    "analytics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["providers"],
+      "description": "Present if it exports analytics(ctx, request) (and optionally link(ctx, request)), called by malha analytics refresh and detect.",
+      "properties": {
+        "providers": { "type": "array", "minItems": 1, "items": { "enum": ["umami", "ga4", "posthog", "search-console"] } },
+        "description": { "type": "string" }
+      }
     },
     "notify": {
       "type": "object",

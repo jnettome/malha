@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Manifest } from './sdk.ts'
 import { hashPlugin, MANIFEST, readManifest, shortHash } from './manifest.ts'
+import { expandPatterns } from './rules.ts'
 
 // malha.plugins.json, next to the topology file and committed with it: which plugins this project
 // uses, where they come from, and (for plugins that are not part of Malha) the hash of the code
@@ -36,6 +37,8 @@ export interface Resolved {
   integrity: string
   files: number
   entry: Entry
+  /** Permissions that could not be filled from the options. */
+  warnings: string[]
 }
 
 export const projectPath = (file: string) => join(dirname(file), PROJECT_FILE)
@@ -96,7 +99,9 @@ export function loadPlugin(file: string, name: string): Resolved {
       `${name} changed since it was added (${entry.integrity ? shortHash(entry.integrity) : 'no hash'} → ${shortHash(integrity)}). ` +
         `Review the code, then run: malha plugin add ${entry.source}`,
     )
-  return { name, dir, builtin, manifest, integrity, files, entry }
+  const { patterns, problems } = expandPatterns(manifest.permissions.fetch, entry.options)
+  const expanded = { ...manifest, permissions: { ...manifest.permissions, fetch: patterns } }
+  return { name, dir, builtin, manifest: expanded, integrity, files, entry, warnings: problems }
 }
 
 /** Every listed plugin; one that fails to load comes back as an error instead. */

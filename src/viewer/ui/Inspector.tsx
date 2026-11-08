@@ -8,6 +8,8 @@ import { SeverityChip } from '../security/SecurityView.tsx'
 import { SEVERITIES } from '../../core/security.ts'
 import { KINDS, NODE_KIND_LABEL, STATUS_LABEL } from './kinds.ts'
 import { FrontPanel, KindSwatch, Led, Meter, PodGrid } from './parts.tsx'
+import { BarList, SeriesChart } from '../traffic/charts.tsx'
+import { fmtFull, PROVIDER_LABEL, siteRows, useAnalytics } from '../traffic/data.ts'
 import { useUi } from './state.tsx'
 import { useLiveNode } from '../live.ts'
 
@@ -286,10 +288,54 @@ function AppDetail({ app }: { app: App }) {
         </Section>
       )}
 
+      {app.analytics?.length ? <AppTraffic app={app} /> : null}
+
       {app.repos?.length ? <AppSecurity app={app} /> : null}
 
       <Notes notes={notesOf(app.notes)} />
     </>
+  )
+}
+
+function AppTraffic({ app }: { app: App }) {
+  const ui = useUi()
+  const data = useAnalytics()
+  if (!data) return null
+  const mine = data.results.filter((r) => r.app === app.id)
+  const row = siteRows({ ...data, results: mine })[0]
+  if (!row) return null
+  const main = row.main
+  const s = row.search?.search
+  return (
+    <Section title={`Traffic · ${data.days} days`}>
+      {main?.totals && (
+        <>
+          <Spec
+            rows={[
+              ['Visitors', `${fmtFull(main.totals.visitors)}${main.previous?.visitors ? ` (${fmtFull(main.previous.visitors)} before)` : ''}`],
+              ['Pageviews', main.totals.pageviews !== undefined ? fmtFull(main.totals.pageviews) : undefined],
+              ['Source', `${PROVIDER_LABEL[main.provider]} ${main.id}`],
+            ]}
+          />
+          {main.series?.length ? <SeriesChart points={main.series.map((p) => ({ date: p.date, value: p.visitors ?? p.pageviews ?? 0 }))} unit="visitors" height={96} /> : null}
+          {main.top?.pages?.length ? <BarList items={main.top.pages.slice(0, 5)} unit="views" label="Pages" /> : null}
+        </>
+      )}
+      {s && (
+        <>
+          <Spec rows={[['Search', `${fmtFull(s.totals.clicks)} clicks, ${fmtFull(s.totals.impressions)} impressions, position ${s.totals.position.toFixed(1)}`]]} />
+          <BarList items={s.queries.slice(0, 5).map((q) => ({ key: q.key, value: q.clicks }))} unit="clicks" label="Search queries" />
+        </>
+      )}
+      {row.failed.map((f) => (
+        <p key={f.id} className="callout callout--notice">
+          {PROVIDER_LABEL[f.provider]} {f.id}: {f.error}
+        </p>
+      ))}
+      <button className="btn" onClick={() => ui.setView('traffic')}>
+        Open in Traffic
+      </button>
+    </Section>
   )
 }
 

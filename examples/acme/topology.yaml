@@ -193,6 +193,9 @@ apps:
     category: product
     namespace: shop
     domains: [acme.example, www.acme.example, shop.acme.example]
+    analytics:
+      - { provider: ga4, id: "312345678" }
+      - { provider: search-console, id: "sc-domain:acme.example" }
     repos: [github.com/acme/storefront]
     pods: { w1: 6, w2: 4, w3: 3 }
     databases:
@@ -215,6 +218,8 @@ apps:
     category: internal
     namespace: admin
     domains: [admin.acme.example]
+    analytics:
+      - { provider: posthog, id: 4242 }
     repos: [github.com/acme/backoffice]
     pods: { w2: 2 }
     databases:
@@ -225,6 +230,8 @@ apps:
     name: Status page
     category: platform
     domains: [status.acme-status.example]
+    analytics:
+      - { provider: umami, id: 7b8f1c2e-5a44-4d1e-9c3a-2f6e8d0b1a55 }
     pods: { w3: 1 }
   - id: monitoring
     name: Prometheus + Grafana
