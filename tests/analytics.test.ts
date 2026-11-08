@@ -165,6 +165,41 @@ describe('the posthog plugin', () => {
   })
 })
 
+describe('the posthog plugin finds projects', () => {
+  it('in every organization, also behind a reverse proxy', async () => {
+    process.env.POSTHOG_PERSONAL_API_KEY = 'phx_key'
+    const { file } = scratch()
+    const KEY = `phc_${'k'.repeat(43)}`
+    vi.stubGlobal('fetch', async (url: string) => {
+      const u = new URL(url)
+      expect(u.origin).toBe('https://us.posthog.com')
+      if (u.pathname === '/api/projects/') return json({ results: [{ id: 1, api_token: 'phc_current' }] })
+      if (u.pathname === '/api/organizations/') return json({ results: [{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }] })
+      if (u.pathname === '/api/organizations/org-a/projects/') return json({ results: [{ id: 1, api_token: 'phc_current' }] })
+      if (u.pathname === '/api/organizations/org-b/projects/') return json({ results: [{ id: 77, api_token: KEY }] })
+      return json({}, 404)
+    })
+    const none = { umami: [], ga4: [], gtm: [] }
+    const trackers = [
+      // Sends through its own domain, so the page doesn't say which PostHog it is.
+      { app: 'admin', hostnames: ['admin.acme.example'], ...none, posthog: [{ key: KEY, host: 'https://admin.acme.example' }] },
+      { app: 'shop', hostnames: ['acme.example'], ...none, posthog: [{ key: `phc_${'z'.repeat(43)}` }] },
+    ]
+    const r = (await runPlugin({ file, plugin: resolved('posthog', { hosts: ['https://us.posthog.com'] }), run: { kind: 'link' }, input: { trackers }, asker: yes })) as LinkResult
+    expect(r.sources).toEqual([{ app: 'admin', source: { provider: 'posthog', id: 77 } }])
+    expect(r.notes).toEqual([`shop: no project with the key phc_zzzzzz… on https://us.posthog.com`])
+  })
+
+  it('says when the key cannot list organizations', async () => {
+    process.env.POSTHOG_PERSONAL_API_KEY = 'phx_key'
+    const { file } = scratch()
+    vi.stubGlobal('fetch', async (url: string) => (new URL(url).pathname === '/api/projects/' ? json({ results: [{ id: 5, api_token: 'phc_current' }] }) : json({ detail: 'scope' }, 403)))
+    const r = (await runPlugin({ file, plugin: resolved('posthog', { hosts: ['https://us.posthog.com'] }), run: { kind: 'link' }, input: { trackers: [{ app: 'admin', hostnames: [], umami: [], ga4: [], gtm: [], posthog: [{ key: 'phc_current' }] }] }, asker: yes })) as LinkResult
+    expect(r.sources).toEqual([{ app: 'admin', source: { provider: 'posthog', id: 5 } }])
+    expect(r.notes?.[0]).toMatch(/403 for \/api\/organizations\/: only the key's current organization was searched/)
+  })
+})
+
 describe('the google plugin', () => {
   async function serviceAccount() {
     const pair = await crypto.subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify'])

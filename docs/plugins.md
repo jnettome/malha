@@ -305,4 +305,4 @@ They read traffic for `malha analytics refresh` and the Traffic tab, and match t
 | --- | --- | --- |
 | `umami` | Umami Cloud, or your servers (`options.hosts`) | `UMAMI_API_KEY`, or `UMAMI_USERNAME` and `UMAMI_PASSWORD`, or `~/.config/malha/umami.json` per host |
 | `google` | GA4 and Search Console | A service account's JSON key: `GOOGLE_SERVICE_ACCOUNT` or `~/.config/malha/google-service-account.json` |
-| `posthog` | PostHog Cloud or your instance (`options.hosts`) | `POSTHOG_PERSONAL_API_KEY` or `~/.config/malha/posthog-key` |
+| `posthog` | PostHog Cloud or your instance (`options.hosts`) | A personal API key with Organization, Project and Query read: `POSTHOG_PERSONAL_API_KEY` or `~/.config/malha/posthog-key` |

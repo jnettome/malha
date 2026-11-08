@@ -74,7 +74,7 @@ The plugin signs its own token with the key and asks only for read-only scopes (
 "posthog": { "source": "builtin:posthog", "options": { "hosts": ["https://us.posthog.com"] } }
 ```
 
-`hosts` is `https://us.posthog.com` or `https://eu.posthog.com` for PostHog Cloud, or your instance. Create a personal API key with read access to **Query** and **Project**, and put it in `POSTHOG_PERSONAL_API_KEY` or `~/.config/malha/posthog-key`.
+`hosts` is `https://us.posthog.com` or `https://eu.posthog.com` for PostHog Cloud, or your instance. Create a personal API key (Settings → Personal API keys) with read access to **Organization**, **Project** and **Query**, and access to every organization your sites are in, and put it in `POSTHOG_PERSONAL_API_KEY` or `~/.config/malha/posthog-key`.
 
 One PostHog project often collects several sites, so the plugin counts only `$pageview` events whose host is one of the app's `domains` (`*.acme.example` matches every subdomain).
 

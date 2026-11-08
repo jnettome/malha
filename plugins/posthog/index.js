@@ -88,34 +88,64 @@ export default {
     const wanted = trackers.filter((t) => t.posthog.length)
     if (!wanted.length) return { sources: [] }
     const auth = await key(ctx)
+    const notes = []
     const projects = new Map()
-    const projectsOn = async (host) => {
-      if (!projects.has(host)) {
-        const res = await ctx.fetch(`${host}/api/projects/?limit=200`, { headers: { authorization: `Bearer ${auth}` } })
-        if (!res.ok) throw new Error(`${host} answered ${res.status} listing projects`)
-        projects.set(host, (await res.json()).results ?? [])
-      }
+    // Every project the key can see on a host. /api/projects/ is only the key's current
+    // organization, so walk the organizations too (that needs Organization: Read).
+    const projectsOn = (host) => {
+      if (!projects.has(host))
+        projects.set(host, (async () => {
+          const get = async (path) => {
+            const res = await ctx.fetch(`${host}${path}`, { headers: { authorization: `Bearer ${auth}` } })
+            if (!res.ok) throw new Error(`${host} answered ${res.status} for ${path.split('?')[0]}`)
+            return (await res.json()).results ?? []
+          }
+          const all = await get('/api/projects/?limit=200')
+          let orgs = []
+          try {
+            orgs = await get('/api/organizations/?limit=100')
+          } catch (e) {
+            notes.push(`${e.message}: only the key's current organization was searched (give the key Organization: Read for the rest)`)
+          }
+          for (const org of orgs) {
+            try {
+              all.push(...(await get(`/api/organizations/${encodeURIComponent(org.id)}/projects/?limit=200`)))
+            } catch (e) {
+              notes.push(`organization ${org.name ?? org.id}: ${e.message}`)
+            }
+          }
+          return all
+        })())
       return projects.get(host)
     }
     const sources = []
-    const notes = []
     for (const t of wanted) {
       for (const p of t.posthog) {
-        const sent = p.host ? new URL(p.host).origin : hosts[0]
-        const host = INGESTION[sent] ?? sent
-        if (!hosts.includes(host)) {
-          notes.push(`${t.app}: sends PostHog events to ${sent}${sent !== host ? ` (API at ${host})` : ''}, which is not in options.hosts${!INGESTION[sent] && p.host ? '; a reverse proxy hides the real host, so add the source by hand' : ''}`)
-          continue
+        const sent = p.host ? new URL(p.host).origin : undefined
+        const likely = sent ? (INGESTION[sent] ?? sent) : hosts[0]
+        // A project key is unique, so look on every configured host: the likely one first, and the
+        // rest for pages that send through a reverse proxy, which hides where events end up.
+        const order = [...new Set([likely, ...hosts])].filter((h) => hosts.includes(h))
+        let found = false
+        for (const host of order) {
+          let list
+          try {
+            list = await projectsOn(host)
+          } catch (e) {
+            notes.push(`${t.app}: ${e.message}`)
+            continue
+          }
+          const match = list.find((x) => x.api_token === p.key)
+          if (match) {
+            sources.push({ app: t.app, source: { provider: 'posthog', id: match.id, ...(host !== hosts[0] ? { host } : {}) } })
+            found = true
+            break
+          }
         }
-        try {
-          const match = (await projectsOn(host)).find((x) => x.api_token === p.key)
-          if (match) sources.push({ app: t.app, source: { provider: 'posthog', id: match.id, ...(host !== hosts[0] ? { host } : {}) } })
-          else notes.push(`${t.app}: no project on ${host} that this API key can see has the key ${p.key.slice(0, 10)}…`)
-        } catch (e) {
-          notes.push(`${t.app}: ${e.message}`)
-        }
+        if (!found)
+          notes.push(`${t.app}: no project with the key ${p.key.slice(0, 10)}… on ${order.join(', ') || 'options.hosts (empty)'}${sent && !hosts.includes(likely) ? `; its events go to ${sent}${INGESTION[sent] ? `, so add ${likely} to options.hosts` : ''}` : ''}`)
       }
     }
-    return { sources, notes }
+    return { sources, notes: [...new Set(notes)] }
   },
 }
