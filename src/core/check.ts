@@ -1,4 +1,4 @@
-import { primaryResult, type AnalyticsCache } from './analytics.ts'
+import { mainResult, type AnalyticsCache } from './analytics.ts'
 import type { LiveNode } from './live.ts'
 import type { SecurityScan, Severity } from './security.ts'
 import type { Topology } from './types.ts'
@@ -184,7 +184,7 @@ function traffic(cache: AnalyticsCache | null | undefined, t: Topology, today: D
   const drop = (now: number | undefined, before: number | undefined) => (now !== undefined && before !== undefined && before >= TRAFFIC_BASELINE ? 1 - now / before : undefined)
   for (const app of new Set(cache.results.map((r) => r.app))) {
     const mine = cache.results.filter((r) => r.app === app)
-    const main = primaryResult(mine)
+    const main = mainResult(mine)
     const label = name.get(app) ?? app
     if (main) {
       const series = main.series ?? []

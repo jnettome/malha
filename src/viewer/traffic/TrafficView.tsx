@@ -88,6 +88,7 @@ export function TrafficView() {
   const referrers = mergeTop(rows.map((r) => r.main?.top?.referrers ?? []))
   const pages = rows.flatMap((r) => (r.main?.top?.pages ?? []).slice(0, 3).map((p) => ({ key: p.key, value: p.value, note: model.appById.get(r.app)?.name ?? r.app }))).sort((a, b) => b.value - a.value).slice(0, 8)
   const failed = rows.flatMap((r) => r.failed)
+  const noted = data.results.filter((r) => r.ok && r.note)
   return (
     <div className="traffic">
       <div className="page-intro">
@@ -150,13 +151,13 @@ export function TrafficView() {
         </section>
       </div>
 
-      {failed.length > 0 && (
+      {failed.length + noted.length > 0 && (
         <section className="tpanel tpanel--notice">
-          <h2 className="eyebrow">Could not read · {failed.length}</h2>
+          <h2 className="eyebrow">{noted.length === 0 ? 'Could not read' : failed.length === 0 ? 'Worth a look' : 'Needs a look'} · {failed.length + noted.length}</h2>
           <ul className="plain">
-            {failed.map((f) => (
+            {[...failed, ...noted].map((f) => (
               <li key={`${f.app}:${f.provider}:${f.id}`}>
-                <b>{model.appById.get(f.app)?.name ?? f.app}</b> · {PROVIDER_LABEL[f.provider]} {f.id}: {f.error}
+                <b>{model.appById.get(f.app)?.name ?? f.app}</b> · {PROVIDER_LABEL[f.provider]} {f.id}: {f.ok ? f.note : f.error}
               </li>
             ))}
           </ul>

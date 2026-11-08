@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { change, primaryResult, type AnalyticsCache, type Provider, type SourceResult } from '../../core/analytics.ts'
+import { change, mainResult, type AnalyticsCache, type MainResult, type Provider, type SourceResult } from '../../core/analytics.ts'
 import { TRAFFIC_BASELINE, TRAFFIC_DROP } from '../../core/check.ts'
 import { loadAnalytics } from '../source.ts'
 
@@ -27,7 +27,7 @@ export const shortDate = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleD
 
 export interface SiteRow {
   app: string
-  main?: SourceResult
+  main?: MainResult
   search?: SourceResult
   failed: SourceResult[]
   providers: Provider[]
@@ -41,7 +41,7 @@ export function siteRows(cache: AnalyticsCache): SiteRow[] {
       const mine = cache.results.filter((r) => r.app === app)
       return {
         app,
-        main: primaryResult(mine),
+        main: mainResult(mine),
         search: mine.find((r) => r.provider === 'search-console' && r.ok && r.search),
         failed: mine.filter((r) => !r.ok),
         providers: [...new Set(mine.filter((r) => r.ok).map((r) => r.provider))],

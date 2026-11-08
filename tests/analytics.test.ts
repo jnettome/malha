@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
 import { analytics, cleanResults, readAnalytics, refreshAnalytics } from '../src/cli/analytics.ts'
 import { loadTopology } from '../src/cli/load.ts'
-import { scan, findTrackers } from '../src/cli/trackers.ts'
-import { ranges, type AnalyticsCache, type AnalyticsRequest, type SourceResult } from '../src/core/analytics.ts'
+import { scan, findTrackers, siteHosts } from '../src/cli/trackers.ts'
+import { mainResult, ranges, unlistedHosts, type AnalyticsCache, type AnalyticsRequest, type SourceResult } from '../src/core/analytics.ts'
 import { runChecks } from '../src/core/check.ts'
 import type { Topology } from '../src/core/types.ts'
 import { addPlugin, allowPlugin } from '../src/plugins/commands.ts'
@@ -83,6 +83,13 @@ describe('finding trackers', () => {
     const bundle = scan(`posthog.init("phc_${'a'.repeat(43)}",{api_host:"https://eu.i.posthog.com"});gtag("config","G-ZZZZ99ZZZZ");x({gaId:"G-NEXTJS1234"})`, 'https://x/')
     expect(bundle.posthog).toEqual([{ key: `phc_${'a'.repeat(43)}`, host: 'https://eu.i.posthog.com' }])
     expect([...bundle.ga4]).toEqual(['G-ZZZZ99ZZZZ', 'G-NEXTJS1234'])
+    // A React Server Components payload, and data attributes.
+    const rsc = scan(String.raw`2c:["$","$L59",null,{\"gaId\":\"G-RSCPAYLOAD1\"}]\n{\"api_host\":\"https://eu.i.posthog.com\",\"token\":\"phc_${'r'.repeat(43)}\"}`, 'https://x/')
+    expect([...rsc.ga4]).toEqual(['G-RSCPAYLOAD1'])
+    expect(rsc.posthog).toEqual([{ key: `phc_${'r'.repeat(43)}`, host: 'https://eu.i.posthog.com' }])
+    const attrs = scan(`<body data-posthog-key="phc_${'d'.repeat(43)}" data-posthog-api-host="https://us.i.posthog.com" data-google-analytics-id="G-DATAATTR01">`, 'https://x/')
+    expect([...attrs.ga4]).toEqual(['G-DATAATTR01'])
+    expect(attrs.posthog[0].host).toBe('https://us.i.posthog.com')
   })
 
   it('loads each app’s home page and its own scripts', async () => {
@@ -97,6 +104,19 @@ describe('finding trackers', () => {
     const trackers = await findTrackers({ ...t, apps: t.apps!.filter((a) => a.id === 'shop') })
     expect(trackers[0].posthog[0].host).toBe('https://us.i.posthog.com')
     expect(fetched).not.toContain('https://cdn.other.example/x.js')
+  })
+
+  it('reads every site of an app, past a landing page with no tracker', async () => {
+    const page = (body: string) => new Response(`<html>${body}</html>`)
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (url === 'https://land.example/') return page('Sign up at web.land.example')
+      if (url === 'https://web.land.example/') return page(`<script>posthog.init("phc_${'w'.repeat(43)}")</script>`)
+      if (url === 'https://white.example/') return page(`<script>posthog.init("phc_${'x'.repeat(43)}")</script>`)
+      return new Response('', { status: 404 })
+    })
+    const t = { apps: [{ id: 'app', name: 'App', domains: ['land.example', 'web.land.example', 'api.land.example', 'white.example'] }] } as unknown as Topology
+    const [found] = await findTrackers(t)
+    expect(found.posthog.map((p) => p.key[4])).toEqual(['w', 'x'])
   })
 })
 
@@ -154,6 +174,7 @@ describe('the posthog plugin', () => {
       queries.push(q)
       if (q.includes('count(DISTINCT properties.$session_id)')) return json({ results: [[q.includes('2026-10-29') ? 9 : 21, 60, 25]] })
       if (q.includes('toDate(timestamp)')) return json({ results: [['2026-11-02', 7, 20]] })
+      if (q.includes('properties.$host AS k')) return json({ results: [['admin.acme.example', 50], ['old-admin.acme.example', 30], ['localhost', 99], [null, 5]] })
       return json({ results: [['/orders', 33]] })
     })
     const r = (await runPlugin({ file, plugin: resolved('posthog', { hosts: ['https://eu.posthog.com'] }), run: { kind: 'analytics' }, input: req([{ app: 'admin', provider: 'posthog', id: 4242, hostnames: ['admin.acme.example', '*.shop.acme.example', "x'; DROP"] }]), asker: yes })) as { results: SourceResult[] }
@@ -162,6 +183,9 @@ describe('the posthog plugin', () => {
     expect(queries[0]).toContain("properties.$host IN ('admin.acme.example')")
     expect(queries[0]).toContain("endsWith(properties.$host, '.shop.acme.example')")
     expect(queries.join('\n')).not.toContain('DROP')
+    // The hostname list is the whole project, unfiltered, and shows what no app lists.
+    expect(queries.find((q) => q.includes('properties.$host AS k'))).not.toContain('properties.$host IN')
+    expect(unlistedHosts(r.results, loadTopology(EXAMPLE).data!.apps!)).toEqual([{ app: 'admin', provider: 'posthog', id: '4242', host: 'old-admin.acme.example', pageviews: 30 }])
   })
 })
 
@@ -190,13 +214,63 @@ describe('the posthog plugin finds projects', () => {
     expect(r.notes).toEqual([`shop: no project with the key phc_zzzzzz… on https://us.posthog.com`])
   })
 
+  it('says what a project collects when it has no pageviews', async () => {
+    process.env.POSTHOG_PERSONAL_API_KEY = 'phx_key'
+    const { file } = scratch()
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      const q = JSON.parse(String(init.body)).query.query as string
+      if (q.includes('SELECT event AS k')) return json({ results: [['$autocapture', 410], ['$screen', 12]] })
+      if (q.includes('count(DISTINCT properties.$session_id)')) return json({ results: [[0, 0, 0]] })
+      return json({ results: [] })
+    })
+    const r = (await runPlugin({ file, plugin: resolved('posthog', { hosts: ['https://us.posthog.com'] }), run: { kind: 'analytics' }, input: req([{ app: 'admin', provider: 'posthog', id: 9, hostnames: ['admin.acme.example'] }]), asker: yes })) as { results: SourceResult[] }
+    expect(r.results[0].ok).toBe(true)
+    expect(r.results[0].note).toBe('no $pageview events in this period, only $autocapture (410), $screen (12): turn on capture_pageview in posthog-js, or this project measures something else')
+  })
+
   it('says when the key cannot list organizations', async () => {
     process.env.POSTHOG_PERSONAL_API_KEY = 'phx_key'
     const { file } = scratch()
     vi.stubGlobal('fetch', async (url: string) => (new URL(url).pathname === '/api/projects/' ? json({ results: [{ id: 5, api_token: 'phc_current' }] }) : json({ detail: 'scope' }, 403)))
     const r = (await runPlugin({ file, plugin: resolved('posthog', { hosts: ['https://us.posthog.com'] }), run: { kind: 'link' }, input: { trackers: [{ app: 'admin', hostnames: [], umami: [], ga4: [], gtm: [], posthog: [{ key: 'phc_current' }] }] }, asker: yes })) as LinkResult
     expect(r.sources).toEqual([{ app: 'admin', source: { provider: 'posthog', id: 5 } }])
-    expect(r.notes?.[0]).toMatch(/403 for \/api\/organizations\/: only the key's current organization was searched/)
+    expect(r.notes?.[0]).toMatch(/^key 1: .*403 for \/api\/organizations\/: only its current organization was searched/)
+  })
+})
+
+describe('the posthog plugin with several accounts', () => {
+  it('finds each project with the key that can see it, and reads it with that key', async () => {
+    process.env.POSTHOG_PERSONAL_API_KEY = 'phx_shop, phx_admin'
+    const { file } = scratch()
+    const KEY = `phc_${'a'.repeat(43)}`
+    const used: string[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const auth = new Headers(init.headers).get('authorization')
+      const u = new URL(url)
+      if (u.pathname.endsWith('/query/')) {
+        used.push(auth!)
+        return auth === 'Bearer phx_admin' ? json({ results: [[3, 9, 4]] }) : json({ detail: 'no access' }, 403)
+      }
+      if (u.pathname === '/api/projects/') return json({ results: auth === 'Bearer phx_admin' ? [{ id: 31, api_token: KEY }] : [{ id: 1, api_token: 'phc_shop' }] })
+      return json({ results: [] })
+    })
+    const plugin = resolved('posthog', { hosts: ['https://us.posthog.com'] })
+    const linked = (await runPlugin({ file, plugin, run: { kind: 'link' }, input: { trackers: [{ app: 'admin', hostnames: [], umami: [], ga4: [], gtm: [], posthog: [{ key: KEY }] }] }, asker: yes })) as LinkResult
+    expect(linked.sources).toEqual([{ app: 'admin', source: { provider: 'posthog', id: 31 } }])
+    const r = (await runPlugin({ file, plugin, run: { kind: 'analytics' }, input: req([{ app: 'admin', provider: 'posthog', id: 31, hostnames: ['admin.acme.example'] }]), asker: yes })) as { results: SourceResult[] }
+    expect(r.results[0]).toMatchObject({ ok: true, totals: { visitors: 3 } })
+    // The shop key is tried once; every later query goes straight to the admin key.
+    expect(used.filter((a) => a === 'Bearer phx_shop')).toHaveLength(1)
+    expect(used.length).toBeGreaterThan(5)
+  })
+
+  it('names the keys it tried, never the keys themselves', async () => {
+    process.env.POSTHOG_PERSONAL_API_KEY = 'phx_secret_one # events\nphx_secret_two'
+    const { file } = scratch()
+    vi.stubGlobal('fetch', async () => json({ detail: 'no' }, 403))
+    const r = (await runPlugin({ file, plugin: resolved('posthog', { hosts: ['https://us.posthog.com'] }), run: { kind: 'analytics' }, input: req([{ app: 'admin', provider: 'posthog', id: 31, hostnames: [] }]), asker: yes })) as { results: SourceResult[] }
+    expect(r.results[0].error).toBe('no key can read project 31 on https://us.posthog.com (events 403, key 2 403)')
+    expect(JSON.stringify(r)).not.toContain('phx_secret')
   })
 })
 
@@ -355,4 +429,38 @@ describe('traffic checks', () => {
 
 it('ships the analytics plugins with no install step', () => {
   for (const name of ['umami', 'posthog', 'google']) expect(inspect(resolve(`plugins/${name}`)).manifest.analytics?.providers.length).toBeGreaterThan(0)
+})
+
+describe('apps with several sites', () => {
+  it('loads one page per site an app serves, bare domain or www first', async () => {
+    expect(siteHosts(['brand.example', 'www.brand.example', 'api.brand.example', 'brand-vip.example', '*.partner.example', 'partner.example', 'app.acme.com.br', 'www.acme.com.br'])).toEqual([
+      ['brand.example', 'www.brand.example', 'api.brand.example'],
+      ['brand-vip.example'],
+      ['partner.example'],
+      ['www.acme.com.br', 'app.acme.com.br'],
+    ])
+  })
+
+  it('adds up an app’s sources from its main provider, and leaves the others out', () => {
+    const ph = (id: string, visitors: number, before: number, series: number[]): SourceResult => ({
+      app: 'shop', provider: 'posthog', id, ok: true,
+      totals: { visitors, pageviews: visitors * 2, sessions: visitors, bounce_rate: id === 'a' ? 0.2 : 0.6 },
+      previous: { visitors: before },
+      series: series.map((v, i) => ({ date: `2026-11-0${i + 1}`, visitors: v })),
+      top: { pages: [{ key: '/', value: visitors }] },
+    })
+    const main = mainResult([
+      ph('a', 300, 200, [1, 2]),
+      { app: 'shop', provider: 'ga4', id: 'g', ok: true, totals: { visitors: 999 } },
+      ph('b', 100, 100, [10, 20]),
+      { app: 'shop', provider: 'posthog', id: 'c', ok: false, error: 'denied' },
+    ])!
+    expect(main).toMatchObject({ provider: 'posthog', id: 'a + b', totals: { visitors: 400, pageviews: 800, sessions: 400 }, previous: { visitors: 300 } })
+    expect(main.totals!.bounce_rate).toBeCloseTo(0.3)
+    expect(main.series).toEqual([{ date: '2026-11-01', visitors: 11 }, { date: '2026-11-02', visitors: 22 }])
+    expect(main.top?.pages).toEqual([{ key: '/', value: 400 }])
+    expect(main.parts?.map((p) => p.id)).toEqual(['a', 'b'])
+    // One source: returned as is.
+    expect(mainResult([ph('a', 1, 1, [])])?.parts).toBeUndefined()
+  })
 })

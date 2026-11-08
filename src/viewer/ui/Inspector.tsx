@@ -314,9 +314,10 @@ function AppTraffic({ app }: { app: App }) {
             rows={[
               ['Visitors', `${fmtFull(main.totals.visitors)}${main.previous?.visitors ? ` (${fmtFull(main.previous.visitors)} before)` : ''}`],
               ['Pageviews', main.totals.pageviews !== undefined ? fmtFull(main.totals.pageviews) : undefined],
-              ['Source', `${PROVIDER_LABEL[main.provider]} ${main.id}`],
+              ['Source', main.parts ? `${PROVIDER_LABEL[main.provider]}, ${main.parts.length} sources added up` : `${PROVIDER_LABEL[main.provider]} ${main.id}`],
             ]}
           />
+          {main.parts ? <BarList items={main.parts.map((p) => ({ key: p.allHosts?.[0]?.key ?? p.id, note: `${PROVIDER_LABEL[p.provider]} ${p.id}`, value: p.totals?.visitors ?? 0 }))} unit="visitors" label="Sites" /> : null}
           {main.series?.length ? <SeriesChart points={main.series.map((p) => ({ date: p.date, value: p.visitors ?? p.pageviews ?? 0 }))} unit="visitors" height={96} /> : null}
           {main.top?.pages?.length ? <BarList items={main.top.pages.slice(0, 5)} unit="views" label="Pages" /> : null}
         </>
@@ -327,9 +328,9 @@ function AppTraffic({ app }: { app: App }) {
           <BarList items={s.queries.slice(0, 5).map((q) => ({ key: q.key, value: q.clicks }))} unit="clicks" label="Search queries" />
         </>
       )}
-      {row.failed.map((f) => (
-        <p key={f.id} className="callout callout--notice">
-          {PROVIDER_LABEL[f.provider]} {f.id}: {f.error}
+      {[...row.failed, ...mine.filter((r) => r.ok && r.note)].map((f) => (
+        <p key={`${f.provider}:${f.id}`} className="callout callout--notice">
+          {PROVIDER_LABEL[f.provider]} {f.id}: {f.ok ? f.note : f.error}
         </p>
       ))}
       <button className="btn" onClick={() => ui.setView('traffic')}>

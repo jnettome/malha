@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { change, primaryResult, ranges, sourceId, type AnalyticsCache, type AnalyticsRequest, type AnalyticsSource, type Provider, type Trackers, type SourceResult, type TopItem } from '../core/analytics.ts'
+import { change, mainResult, ranges, sourceId, unlistedHosts, type AnalyticsCache, type AnalyticsRequest, type AnalyticsSource, type Provider, type Trackers, type SourceResult, type TopItem } from '../core/analytics.ts'
 import { runPlugin, Session, type Asker } from '../plugins/host.ts'
 import { loadPlugins, type Resolved } from '../plugins/project.ts'
 import type { LinkResult } from '../plugins/sdk.ts'
@@ -74,10 +74,12 @@ export function cleanResults(raw: unknown, request: AnalyticsRequest): SourceRes
       primary: source.primary,
       ok: r.ok === true,
       error: text(r.error),
+      note: text(r.note),
       totals: totals(r.totals),
       previous: totals(r.previous),
       series: Array.isArray(r.series) ? r.series.slice(0, 400).flatMap((p: Record<string, unknown>) => (day(p?.date) ? [{ date: p.date as string, visitors: num(p.visitors), pageviews: num(p.pageviews) }] : [])) : undefined,
       top: r.top ? { pages: top(r.top.pages), referrers: top(r.top.referrers), countries: top(r.top.countries), devices: top(r.top.devices) } : undefined,
+      allHosts: top(r.allHosts),
       search: source.provider === 'search-console' ? search(r.search) : undefined,
     })
   }
@@ -157,32 +159,39 @@ const fmt = (n: number | undefined) => (n === undefined ? '—' : n >= 10_000 ? 
 const pct = (x: number | undefined) => (x === undefined ? '' : `${x >= 0 ? '+' : ''}${Math.round(x * 100)}%`)
 
 /** The table `refresh` and plain `malha analytics` print. */
-export function printSummary(cache: AnalyticsCache, appNames: Map<string, string>) {
+export function printSummary(cache: AnalyticsCache, apps: { id: string; name: string; domains?: string[] }[]) {
+  const appNames = new Map(apps.map((a) => [a.id, a.name]))
   console.log(`\n${c.bold('Traffic')} ${cache.range.from} → ${cache.range.to} (${cache.days} days), against the ${cache.days} days before\n`)
-  const apps = [...new Set(cache.results.map((r) => r.app))]
-  const rows = apps.map((app) => {
+  const ids = [...new Set(cache.results.map((r) => r.app))]
+  const rows = ids.map((app) => {
     const mine = cache.results.filter((r) => r.app === app)
-    const main = primaryResult(mine)
+    const main = mainResult(mine)
     const sc = mine.find((r) => r.provider === 'search-console' && r.ok)
     return { app, main, sc, failed: mine.filter((r) => !r.ok) }
   })
   rows.sort((a, b) => (b.main?.totals?.visitors ?? -1) - (a.main?.totals?.visitors ?? -1))
   for (const r of rows) {
     const name = (appNames.get(r.app) ?? r.app).padEnd(22)
-    const v = r.main ? `${fmt(r.main.totals?.visitors).padStart(6)} visitors ${pct(change(r.main.totals?.visitors, r.main.previous?.visitors)).padEnd(6)} ${c.dim(r.main.provider)}` : c.dim('no traffic source answered'.padEnd(32))
+    const v = r.main ? `${fmt(r.main.totals?.visitors).padStart(6)} visitors ${pct(change(r.main.totals?.visitors, r.main.previous?.visitors)).padEnd(6)} ${c.dim(r.main.parts ? `${r.main.provider} ×${r.main.parts.length}` : r.main.provider)}` : c.dim('no traffic source answered'.padEnd(32))
     const s = r.sc?.search ? `  ${fmt(r.sc.search.totals.clicks).padStart(5)} search clicks, position ${r.sc.search.totals.position.toFixed(1)}` : ''
     console.log(`  ${name} ${v}${s}`)
     for (const f of r.failed) console.log(`  ${''.padEnd(22)} ${c.yellow(`${f.provider} ${f.id}: ${f.error ?? 'failed'}`)}`)
+    for (const n of cache.results.filter((x) => x.app === r.app && x.ok && x.note)) console.log(`  ${''.padEnd(22)} ${c.yellow(`${n.provider} ${n.id}: ${n.note}`)}`)
+  }
+  const unlisted = unlistedHosts(cache.results, apps)
+  if (unlisted.length) {
+    console.log(`\n  ${c.yellow('Not counted:')} pageviews on hostnames no app lists. Add each to its app's domains to count it.`)
+    for (const u of unlisted) console.log(`  ${c.yellow('·')} ${u.host.padEnd(28)} ${fmt(u.pageviews).padStart(6)} pageviews in ${u.provider} ${u.id} (${appNames.get(u.app) ?? u.app})`)
   }
 }
 
 export async function analytics(file: string, sub: string | undefined, opts: { days: number; timezone: string; yes: boolean; dryRun: boolean }) {
   const { data, errors } = loadTopology(file)
   if (!data) throw new Error(`${display(file)} is invalid: ${errors[0]}`)
-  const names = new Map((data.apps ?? []).map((a) => [a.id, a.name]))
+  const apps = data.apps ?? []
   if (sub === 'refresh') {
     const cache = await refreshAnalytics(file, { days: opts.days, timezone: opts.timezone })
-    printSummary(cache, names)
+    printSummary(cache, apps)
     console.log(c.dim(`\nWrote ${display(analyticsPath(file))}. The Traffic tab of malha dev shows it.`))
     if (cache.results.every((r) => !r.ok)) process.exitCode = 1
     return
@@ -191,7 +200,7 @@ export async function analytics(file: string, sub: string | undefined, opts: { d
   if (sub && sub !== 'show') throw new Error('usage: malha analytics [show|refresh|detect] [file]')
   const cache = readAnalytics(file)
   if (!cache) return console.log(`No traffic yet. Run: malha analytics refresh ${display(file)}`)
-  printSummary(cache, names)
+  printSummary(cache, apps)
   console.log(c.dim(`\nFetched ${cache.fetched.replace('T', ' ').slice(0, 16)} UTC.`))
 }
 
