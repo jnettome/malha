@@ -305,6 +305,7 @@ function AppTraffic({ app }: { app: App }) {
   const row = siteRows({ ...data, results: mine })[0]
   if (!row) return null
   const main = row.main
+  const others = mine.filter((r) => r.ok && r.totals && r.provider !== 'search-console' && r.provider !== main?.provider)
   const s = row.search?.search
   return (
     <Section title={`Traffic · ${data.days} days`}>
@@ -315,6 +316,11 @@ function AppTraffic({ app }: { app: App }) {
               ['Visitors', `${fmtFull(main.totals.visitors)}${main.previous?.visitors ? ` (${fmtFull(main.previous.visitors)} before)` : ''}`],
               ['Pageviews', main.totals.pageviews !== undefined ? fmtFull(main.totals.pageviews) : undefined],
               ['Source', main.parts ? `${PROVIDER_LABEL[main.provider]}, ${main.parts.length} sources added up` : `${PROVIDER_LABEL[main.provider]} ${main.id}`],
+              // Other providers count the same visits, so they are not added in; shown to compare.
+              ...[...new Set(others.map((r) => r.provider))].map((p): [string, string] => [
+                'Also',
+                `${PROVIDER_LABEL[p]}: ${fmtFull(others.filter((r) => r.provider === p).reduce((n, r) => n + (r.totals?.visitors ?? 0), 0))} visitors`,
+              ]),
             ]}
           />
           {main.parts ? <BarList items={main.parts.map((p) => ({ key: p.allHosts?.[0]?.key ?? p.id, note: `${PROVIDER_LABEL[p.provider]} ${p.id}`, value: p.totals?.visitors ?? 0 }))} unit="visitors" label="Sites" /> : null}

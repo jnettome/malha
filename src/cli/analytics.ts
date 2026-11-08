@@ -167,12 +167,12 @@ export function printSummary(cache: AnalyticsCache, apps: { id: string; name: st
     const mine = cache.results.filter((r) => r.app === app)
     const main = mainResult(mine)
     const sc = mine.find((r) => r.provider === 'search-console' && r.ok)
-    return { app, main, sc, failed: mine.filter((r) => !r.ok) }
+    return { app, main, sc, failed: mine.filter((r) => !r.ok), measured: mine.some((r) => r.provider !== 'search-console') }
   })
   rows.sort((a, b) => (b.main?.totals?.visitors ?? -1) - (a.main?.totals?.visitors ?? -1))
   for (const r of rows) {
     const name = (appNames.get(r.app) ?? r.app).padEnd(22)
-    const v = r.main ? `${fmt(r.main.totals?.visitors).padStart(6)} visitors ${pct(change(r.main.totals?.visitors, r.main.previous?.visitors)).padEnd(6)} ${c.dim(r.main.parts ? `${r.main.provider} ×${r.main.parts.length}` : r.main.provider)}` : c.dim('no traffic source answered'.padEnd(32))
+    const v = r.main ? `${fmt(r.main.totals?.visitors).padStart(6)} visitors ${pct(change(r.main.totals?.visitors, r.main.previous?.visitors)).padEnd(6)} ${c.dim(r.main.parts ? `${r.main.provider} ×${r.main.parts.length}` : r.main.provider)}` : c.dim((r.measured ? 'no traffic source answered' : 'search only').padEnd(32))
     const s = r.sc?.search ? `  ${fmt(r.sc.search.totals.clicks).padStart(5)} search clicks, position ${r.sc.search.totals.position.toFixed(1)}` : ''
     console.log(`  ${name} ${v}${s}`)
     for (const f of r.failed) console.log(`  ${''.padEnd(22)} ${c.yellow(`${f.provider} ${f.id}: ${f.error ?? 'failed'}`)}`)
