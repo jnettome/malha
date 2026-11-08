@@ -36,14 +36,16 @@ async function keys(ctx) {
 /** The key that last answered for a project, so the others are tried only once. */
 const chosen = new Map()
 
-/** A HogQL condition matching the app's hostnames; "*.x" matches every subdomain of x. */
-function hostFilter(hostnames) {
+/** A HogQL condition: `field` is one of the app's hostnames ("*.x" matches every subdomain of x).
+ *  Undefined when the app lists none. */
+function hostMatch(field, hostnames) {
   const ok = hostnames.filter((h) => /^(\*\.)?[a-z0-9.-]+$/i.test(h))
-  if (!ok.length) return 'true'
+  if (!ok.length) return undefined
   const exact = ok.filter((h) => !h.startsWith('*.')).map((h) => `'${h.toLowerCase()}'`)
-  const wild = ok.filter((h) => h.startsWith('*.')).map((h) => `endsWith(properties.$host, '${h.slice(1).toLowerCase()}')`)
-  return `(${[exact.length ? `properties.$host IN (${exact.join(', ')})` : '', ...wild].filter(Boolean).join(' OR ')})`
+  const wild = ok.filter((h) => h.startsWith('*.')).map((h) => `endsWith(${field}, '${h.slice(1).toLowerCase()}')`)
+  return `(${[exact.length ? `${field} IN (${exact.join(', ')})` : '', ...wild].filter(Boolean).join(' OR ')})`
 }
+const hostFilter = (hostnames) => hostMatch('properties.$host', hostnames) ?? 'true'
 
 const between = (r) => `timestamp >= toDateTime('${r.from} 00:00:00') AND timestamp < toDateTime('${r.to} 00:00:00') + INTERVAL 1 DAY`
 
@@ -78,14 +80,16 @@ async function one(ctx, list, source, req) {
     const [[visitors, pageviews, sessions] = []] = await q(`SELECT count(DISTINCT person_id), count(), count(DISTINCT properties.$session_id) FROM events WHERE ${where(r)}`)
     return { visitors: Number(visitors) || 0, pageviews: Number(pageviews) || 0, sessions: Number(sessions) || 0 }
   }
-  const topOf = async (expr) => (await q(`SELECT ${expr} AS k, count() AS v FROM events WHERE ${where(req.range)} GROUP BY k ORDER BY v DESC LIMIT 10`)).map(([k, v]) => ({ key: String(k ?? '(none)'), value: Number(v) || 0 }))
+  const topOf = async (expr, also = '') => (await q(`SELECT ${expr} AS k, count() AS v FROM events WHERE ${where(req.range)}${also} GROUP BY k ORDER BY v DESC LIMIT 10`)).map(([k, v]) => ({ key: String(k ?? '(none)'), value: Number(v) || 0 }))
+  // Moving between the app's own pages isn't a referral.
+  const self = hostMatch('properties.$referring_domain', source.hostnames)
   // The first query finds the key that can read this project; the rest go in parallel with it.
   const totals = await totalsOf(req.range)
   const [previous, series, pages, referrers, countries, devices] = await Promise.all([
     totalsOf(req.previous),
     q(`SELECT toDate(timestamp) AS d, count(DISTINCT person_id), count() FROM events WHERE ${where(req.range)} GROUP BY d ORDER BY d`),
     topOf('properties.$pathname'),
-    topOf("if(properties.$referring_domain = '$direct', '(direct)', properties.$referring_domain)"),
+    topOf("if(properties.$referring_domain = '$direct', '(direct)', properties.$referring_domain)", self ? ` AND NOT ifNull(${self}, 0)` : ''),
     topOf('properties.$geoip_country_code'),
     topOf('properties.$device_type'),
   ])

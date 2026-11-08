@@ -182,6 +182,8 @@ describe('the posthog plugin', () => {
     expect(r.results[0].series?.[1]).toEqual({ date: '2026-11-02', visitors: 7, pageviews: 20 })
     expect(queries[0]).toContain("properties.$host IN ('admin.acme.example')")
     expect(queries[0]).toContain("endsWith(properties.$host, '.shop.acme.example')")
+    // Referrers leave out the app's own hostnames.
+    expect(queries.find((q) => q.includes('$referring_domain'))).toContain("AND NOT ifNull((properties.$referring_domain IN ('admin.acme.example') OR endsWith(properties.$referring_domain, '.shop.acme.example')), 0)")
     expect(queries.join('\n')).not.toContain('DROP')
     // The hostname list is the whole project, unfiltered, and shows what no app lists.
     expect(queries.find((q) => q.includes('properties.$host AS k'))).not.toContain('properties.$host IN')
