@@ -27,7 +27,7 @@ Usage
   malha check [file]          what needs a person: expiring domains, full nodes, single-node databases, vulnerabilities
                                 --live  --notify  --digest  --json  --fail-on critical|warning|none  --vulns critical|high|medium
   malha analytics [file]      traffic per app from Umami, Google Analytics, PostHog and Search Console
-  malha analytics refresh [file]   fetch it again   --days 30  --timezone UTC
+  malha analytics refresh [file]   fetch the last 7, 30 and 90 days   --days N  --from YYYY-MM-DD --to YYYY-MM-DD  --timezone UTC
   malha analytics detect [file]    find the trackers on each app's pages; propose its analytics sources   --dry-run  --yes
   malha schema [dir]          write topology.schema.json for editor autocomplete
 
@@ -183,10 +183,10 @@ async function main(argv: string[]) {
     case 'analytics': {
       const sub = ['show', 'refresh', 'detect'].includes(rest[0]) ? rest[0] : undefined
       const p = parse(sub ? rest.slice(1) : rest, ['yes', 'dry-run'])
-      checkFlags(p, ['days', 'timezone', 'yes', 'dry-run'])
-      const days = Number(one(p, 'days') ?? 30)
-      if (!Number.isInteger(days) || days < 1 || days > 365) throw new Error('--days takes a whole number from 1 to 365')
-      return analytics(topologyPath(p.positionals[0]), sub, { days, timezone: one(p, 'timezone') ?? Intl.DateTimeFormat().resolvedOptions().timeZone, yes: has(p, 'yes'), dryRun: has(p, 'dry-run') })
+      checkFlags(p, ['days', 'from', 'to', 'timezone', 'yes', 'dry-run'])
+      const days = one(p, 'days') === undefined ? undefined : Number(one(p, 'days'))
+      if (days !== undefined && (!Number.isInteger(days) || days < 1 || days > 365)) throw new Error('--days takes a whole number from 1 to 365')
+      return analytics(topologyPath(p.positionals[0]), sub, { days, from: one(p, 'from'), to: one(p, 'to'), timezone: one(p, 'timezone') ?? Intl.DateTimeFormat().resolvedOptions().timeZone, yes: has(p, 'yes'), dryRun: has(p, 'dry-run') })
     }
     case 'check': {
       const p = parse(rest, ['live', 'notify', 'digest', 'json'])

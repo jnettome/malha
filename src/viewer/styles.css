@@ -3155,6 +3155,195 @@ input:focus-visible {
   color: var(--text-3);
 }
 
+/* Rows are links to each site's page. */
+a.tsite {
+  text-decoration: none;
+}
+
+/* Period picker: presets, ranges fetched before, and a custom range in malha dev. */
+.period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.period__saved,
+.period__custom input {
+  padding: 6px 8px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 3px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color-scheme: dark;
+}
+
+.period__custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.period__custom label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.period__hint {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* A site's page. */
+.tback {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  text-decoration: none;
+}
+
+.tback:hover {
+  color: var(--text-1);
+}
+
+.tlinks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.tlinks__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.tlink {
+  padding: 4px 8px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-1);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.tlink:hover {
+  border-color: var(--accent);
+}
+
+.tsection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin: 32px 0 12px;
+}
+
+.tsection h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.tpanel--chart {
+  margin-bottom: 24px;
+}
+
+.tpanel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tpanel__lede {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.traffic__grid--wide {
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+}
+
+.matrix--static tbody tr {
+  cursor: default;
+}
+
+.matrix .num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ttable__key {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* This period against the previous: a solid line in the chart hue, a dashed neutral one. */
+.chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.chart__key {
+  display: inline-block;
+  width: 16px;
+  margin-right: 4px;
+  vertical-align: middle;
+  border-top: 2px solid var(--chart-line);
+}
+
+.chart__key--before {
+  border-top: 2px dashed var(--text-3);
+}
+
+.chart__line--before {
+  stroke: var(--text-3);
+  stroke-dasharray: 5 4;
+}
+
+.chart__tip--two {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chart__tip-before {
+  color: var(--text-3);
+}
+
 @media (max-width: 900px) {
   .traffic {
     padding: 20px 16px 48px;
@@ -3169,6 +3358,12 @@ input:focus-visible {
   }
   .spark svg {
     width: 88px;
+  }
+  .ttable__wide {
+    display: none;
+  }
+  .ttable__key {
+    max-width: 150px;
   }
 }
 

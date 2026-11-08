@@ -56,9 +56,33 @@ const propertyId = (id) => String(id).replace(/^properties\//, '')
 const metric = (row, i) => Number(row?.metricValues?.[i]?.value ?? 0)
 const isoDate = (yyyymmdd) => `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`
 
+/** Every day of a range, filled from a map of date → values, zeros where there is none. */
+function everyDay(range, byDay, zero) {
+  const out = []
+  for (let t = Date.parse(`${range.from}T00:00:00Z`); t <= Date.parse(`${range.to}T00:00:00Z`); t += 86_400_000) {
+    const date = new Date(t).toISOString().slice(0, 10)
+    out.push({ date, ...(byDay.get(date) ?? zero) })
+  }
+  return out
+}
+
+/** Runs `fn` over `items`, `n` at a time. */
+async function pool(items, n, fn) {
+  const out = new Array(items.length)
+  let next = 0
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++
+      out[i] = await fn(items[i])
+    }
+  }))
+  return out
+}
+
 async function ga4(ctx, token, source, req) {
   const id = propertyId(source.id)
   const now = { startDate: req.range.from, endDate: req.range.to }
+  const seriesReport = (range) => ({ dateRanges: [range], dimensions: [{ name: 'date' }], metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }], orderBys: [{ dimension: { dimensionName: 'date' } }], limit: 400 })
   const topReport = (dimension, metricName) => ({
     dateRanges: [now],
     dimensions: [{ name: dimension }],
@@ -66,30 +90,33 @@ async function ga4(ctx, token, source, req) {
     orderBys: [{ metric: { metricName }, desc: true }],
     limit: 10,
   })
-  const batch = await call(ctx, token, 'POST', `${DATA}/properties/${id}:batchRunReports`, {
-    requests: [
+  // A batch takes at most five reports.
+  const batch = (requests) => call(ctx, token, 'POST', `${DATA}/properties/${id}:batchRunReports`, { requests }).then((b) => b.reports ?? [])
+  const [[totalsReport, nowSeries, pages, referrers, countries], [beforeSeries, devices, browsers, os]] = await Promise.all([
+    batch([
       {
         dateRanges: [{ ...now, name: 'now' }, { startDate: req.previous.from, endDate: req.previous.to, name: 'before' }],
         metrics: ['activeUsers', 'screenPageViews', 'sessions', 'bounceRate', 'averageSessionDuration'].map((name) => ({ name })),
       },
-      { dateRanges: [now], dimensions: [{ name: 'date' }], metrics: [{ name: 'activeUsers' }, { name: 'screenPageViews' }], orderBys: [{ dimension: { dimensionName: 'date' } }], limit: 400 },
+      seriesReport(now),
       topReport('pagePath', 'screenPageViews'),
       topReport('sessionSource', 'sessions'),
       topReport('country', 'activeUsers'),
-    ],
-  })
-  const [totalsReport, seriesReport, pages, referrers, countries] = batch.reports ?? []
-  const devices = await call(ctx, token, 'POST', `${DATA}/properties/${id}:runReport`, topReport('deviceCategory', 'activeUsers'))
+    ]),
+    batch([seriesReport({ startDate: req.previous.from, endDate: req.previous.to }), topReport('deviceCategory', 'activeUsers'), topReport('browser', 'activeUsers'), topReport('operatingSystem', 'activeUsers')]),
+  ])
   const range = (name) => (totalsReport?.rows ?? []).find((r) => r.dimensionValues?.some((d) => d.value === name))
   const totals = (row) => (row ? { visitors: metric(row, 0), pageviews: metric(row, 1), sessions: metric(row, 2), bounce_rate: metric(row, 3), avg_duration: metric(row, 4) } : { visitors: 0, pageviews: 0, sessions: 0 })
-  const byDay = new Map((seriesReport?.rows ?? []).map((r) => [isoDate(r.dimensionValues[0].value), { visitors: metric(r, 0), pageviews: metric(r, 1) }]))
-  const days = []
-  for (let t = Date.parse(`${req.range.from}T00:00:00Z`); t <= Date.parse(`${req.range.to}T00:00:00Z`); t += 86_400_000) {
-    const date = new Date(t).toISOString().slice(0, 10)
-    days.push({ date, ...(byDay.get(date) ?? { visitors: 0, pageviews: 0 }) })
-  }
+  const byDay = (report) => new Map((report?.rows ?? []).map((r) => [isoDate(r.dimensionValues[0].value), { visitors: metric(r, 0), pageviews: metric(r, 1) }]))
+  const zero = { visitors: 0, pageviews: 0 }
   const top = (report) => (report?.rows ?? []).map((r) => ({ key: r.dimensionValues?.[0]?.value || '(not set)', value: metric(r, 0) }))
-  return { totals: totals(range('now')), previous: totals(range('before')), series: days, top: { pages: top(pages), referrers: top(referrers), countries: top(countries), devices: top(devices) } }
+  return {
+    totals: totals(range('now')),
+    previous: totals(range('before')),
+    series: everyDay(req.range, byDay(nowSeries), zero),
+    previousSeries: everyDay(req.previous, byDay(beforeSeries), zero),
+    top: { pages: top(pages), referrers: top(referrers), countries: top(countries), devices: top(devices), browsers: top(browsers), os: top(os) },
+  }
 }
 
 // ---- Search Console ----------------------------------------------------------------------------
@@ -102,29 +129,40 @@ async function searchConsole(ctx, token, source, req) {
     return { clicks: r?.clicks ?? 0, impressions: r?.impressions ?? 0, ctr: r?.ctr ?? 0, position: r?.position ?? 0 }
   }
   const rows = (body) => (body.rows ?? []).map((r) => ({ key: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }))
-  const [now, before, series, queries, pages] = await Promise.all([
+  const [now, before, series, previousSeries, queries, pages] = await Promise.all([
     q(req.range, [], 1),
     q(req.previous, [], 1),
     q(req.range, ['date'], 400),
-    q(req.range, ['query'], 10),
-    q(req.range, ['page'], 10),
+    q(req.previous, ['date'], 400),
+    q(req.range, ['query'], 25),
+    q(req.range, ['page'], 25),
   ])
-  return { search: { totals: sum(now), previous: sum(before), series: (series.rows ?? []).map((r) => ({ date: r.keys[0], clicks: r.clicks, impressions: r.impressions })), queries: rows(queries), pages: rows(pages) } }
+  const zero = { clicks: 0, impressions: 0 }
+  const byDay = (body) => new Map((body.rows ?? []).map((r) => [r.keys[0], { clicks: r.clicks, impressions: r.impressions }]))
+  return {
+    search: {
+      totals: sum(now),
+      previous: sum(before),
+      series: everyDay(req.range, byDay(series), zero),
+      previousSeries: everyDay(req.previous, byDay(previousSeries), zero),
+      queries: rows(queries),
+      pages: rows(pages),
+    },
+  }
 }
 
 export default {
   async analytics(ctx, req) {
     const token = await accessToken(ctx, await serviceAccount(ctx))
-    const results = []
-    for (const source of req.sources) {
+    // Three properties at a time: well inside Google's limits, and a third of the wait.
+    const results = await pool(req.sources, 3, async (source) => {
       const base = { app: source.app, provider: source.provider, id: String(source.id) }
       try {
-        const data = source.provider === 'ga4' ? await ga4(ctx, token, source, req) : await searchConsole(ctx, token, source, req)
-        results.push({ ...base, ok: true, ...data })
+        return { ...base, ok: true, ...(source.provider === 'ga4' ? await ga4(ctx, token, source, req) : await searchConsole(ctx, token, source, req)) }
       } catch (e) {
-        results.push({ ...base, ok: false, error: e.message })
+        return { ...base, ok: false, error: e.message }
       }
-    }
+    })
     return { results }
   },
 

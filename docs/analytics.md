@@ -7,8 +7,9 @@ Every site's visitors and search traffic in one place: Umami, Google Analytics 4
 ```bash
 malha plugin add umami infra/topology.yaml     # and/or google, posthog
 malha analytics detect infra/topology.yaml     # which app loads which tracker; review the diff
-malha analytics refresh infra/topology.yaml    # fetch the last 30 days (--days 1 … 365)
-malha analytics infra/topology.yaml            # the same table in the terminal
+malha analytics refresh infra/topology.yaml    # the last 7, 30 and 90 days
+malha analytics refresh infra/topology.yaml --from 2026-09-01 --to 2026-09-30   # any range
+malha analytics infra/topology.yaml            # the same table in the terminal (--days 7, or --from/--to)
 malha dev infra/topology.yaml                  # the Traffic tab; refreshes itself every 6 hours
 ```
 
@@ -36,6 +37,20 @@ These ids are not secrets: they are in every page's source. Credentials never go
 - **`malha analytics detect`** loads the home page of each site an app serves (one per domain, so whitelabels count), and the scripts it loads from its own origin, and picks out tracker ids: Umami website ids, GA4 measurement ids (`G-…`), Tag Manager containers, PostHog project keys. Each analytics plugin then matches them to its sources (a GA4 measurement id to its property, a PostHog key to its project), and Search Console properties to the app that owns each domain. You review the proposed `analytics` entries as a diff. Malha itself does the page loading, and only ever requests the apps' own pages.
 - **`malha analytics refresh`** asks each plugin for its sources' numbers over whole days ending yesterday, and the same number of days before, and writes `.malha/analytics.json`. Plugins are untrusted: Malha keeps only the sources it asked for, and well-formed numbers.
 - **The Traffic tab** reads that file. `malha dev` refreshes it when it is older than 6 hours, asking in the page for anything not approved yet; `malha build` embeds it (`--no-analytics` leaves it out).
+
+## Periods
+
+Every refresh fetches the last 7, 30 and 90 days, each against the same number of days just before. `--days 14` adds the last 14 days, which later refreshes keep fetching. `--from 2026-09-01 --to 2026-09-30` fetches a fixed range, up to 366 days and ending by yesterday; the file keeps the eight fetched most recently. `malha check` and the terminal summary use the last 30 days.
+
+In the Traffic tab, the period picker switches between them. Under `malha dev`, **Custom** fetches any range: the plugins read it, asking in the page if they need to, and the page opens on it. A static build shows the periods it was built with. The address keeps the period and the site (`#traffic/shop?p=90d`), so a link opens the same view.
+
+## The Traffic tab
+
+- **Every site:** visitors, pageviews, search clicks and impressions with their change; visitors per day for all sites against the previous period; each site with its trend; top search queries, referrers, pages, countries and devices; sources that could not be read.
+![A site's page in the Traffic tab, fictional Acme data](traffic-site.png)
+
+- **One site** (click its row): visitors, pageviews, sessions, pages per visit, bounce rate and visit length; visitors or pageviews per day against the previous period, with both values on hover; pages, referrers, countries, devices, browsers and operating systems; for Search Console, clicks, impressions, click rate and position, clicks per day, and the top queries and pages with their own numbers. What other providers count for the same site is shown beside it, not added in.
+- **Links:** each source opens in its own dashboard (Google Analytics, Search Console, PostHog's web analytics, Umami), on the same dates where the dashboard takes them. Malha builds these links from the ids in the topology and the servers in `malha.plugins.json`, never from what a plugin returns.
 
 ## Setting up each provider
 
@@ -101,4 +116,4 @@ Each provider counts its own way, so compare a site with itself over time rather
 
 ## Privacy
 
-Only aggregates leave the providers: counts per day, and the top pages, referrers, countries, devices and search queries. They stay in `.malha/analytics.json`, which is never committed. A `malha build` with traffic inside is as private as the numbers: host it behind authentication.
+Only aggregates leave the providers: counts per day, and the top pages, referrers, countries, devices, browsers, operating systems and search queries. They stay in `.malha/analytics.json`, which is never committed. A `malha build` with traffic inside is as private as the numbers: host it behind authentication.

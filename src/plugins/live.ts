@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { customRange, pickPeriod, type DateRange } from '../core/analytics.ts'
 import { readAnalytics, refreshAnalytics } from '../cli/analytics.ts'
 import { loadTopology } from '../cli/load.ts'
 import type { Ask, LiveSnapshot, PluginStatus } from '../core/live.ts'
@@ -111,25 +112,38 @@ export function createLive(file: string, opts: LiveOptions) {
 
   // Traffic: refresh when it is older than ANALYTICS_EVERY, through the same questions in the page.
   const ANALYTICS_EVERY = 6 * 3600
+  let refreshing = false
+  /** Fetch the presets (no range) or one fixed range, with questions in the page. */
+  async function refreshTraffic(range: DateRange | undefined): Promise<string | undefined> {
+    refreshing = true
+    const name = loadPlugins(file).filter((p) => p.plugin?.manifest.analytics).map((p) => p.name).join(', ')
+    opts.log(`traffic: fetching ${range ? `${range.from} to ${range.to}` : 'the last 7, 30 and 90 days'} (${name})`)
+    status('analytics', { state: 'starting', message: range ? `fetching ${range.from} to ${range.to}` : undefined })
+    try {
+      const asker: Asker = { ask: (q) => askerFor(q.plugin, 'analytics').ask(q) }
+      const out = await refreshAnalytics(file, { periods: range ? [range] : undefined, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asker, session, log: (l) => opts.log(`traffic │ ${l}`) })
+      const shown = pickPeriod(out)!
+      const failed = shown.results.filter((r) => !r.ok).length
+      status('analytics', { state: failed === shown.results.length ? 'error' : 'ok', at: shown.fetched, message: failed ? `${failed} of ${shown.results.length} sources failed; malha analytics shows why` : undefined })
+    } catch (e) {
+      status('analytics', { state: 'error', message: (e as Error).message })
+      return (e as Error).message
+    } finally {
+      refreshing = false
+    }
+  }
+
   async function analyticsTick() {
     if (closed) return
     const sources = (loadTopology(file).data?.apps ?? []).some((a) => a.analytics?.length)
     const plugins = loadPlugins(file).filter((p) => p.plugin?.manifest.analytics)
     if (sources && plugins.length) {
-      const age = (Date.now() - Date.parse(readAnalytics(file)?.fetched ?? '1970-01-01')) / 1000
+      const fetched = pickPeriod(readAnalytics(file))?.fetched
+      const age = (Date.now() - Date.parse(fetched ?? '1970-01-01')) / 1000
       const name = plugins.map((p) => p.name).join(', ')
-      statuses.set('analytics', { name: `traffic (${name})`, every: ANALYTICS_EVERY, state: age < ANALYTICS_EVERY ? 'ok' : 'starting', at: readAnalytics(file)?.fetched })
-      if (age >= ANALYTICS_EVERY) {
-        opts.log(`traffic: refreshing (${name})`)
-        try {
-          const asker: Asker = { ask: (q) => askerFor(q.plugin, 'analytics').ask(q) }
-          const cache = await refreshAnalytics(file, { days: readAnalytics(file)?.days ?? 30, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asker, session, log: (l) => opts.log(`traffic │ ${l}`) })
-          const failed = cache.results.filter((r) => !r.ok).length
-          status('analytics', { state: failed === cache.results.length ? 'error' : 'ok', at: cache.fetched, message: failed ? `${failed} of ${cache.results.length} sources failed; malha analytics shows why` : undefined })
-        } catch (e) {
-          status('analytics', { state: 'error', message: (e as Error).message })
-        }
-      } else push()
+      statuses.set('analytics', { name: `traffic (${name})`, every: ANALYTICS_EVERY, state: age < ANALYTICS_EVERY ? 'ok' : 'starting', at: fetched })
+      if (age >= ANALYTICS_EVERY && !refreshing) await refreshTraffic(undefined)
+      else push()
     }
     if (closed) return
     const timer = setTimeout(() => {
@@ -159,6 +173,15 @@ export function createLive(file: string, opts: LiveOptions) {
 
   return {
     snapshot,
+    /** Fetch one fixed range of traffic, for the page's date picker. Resolves when it is written. */
+    async fetchRange(from: string, to: string): Promise<{ status: number; error?: string; key?: string }> {
+      const r = customRange(from, to)
+      if ('error' in r) return { status: 400, error: r.error }
+      if (refreshing) return { status: 409, error: 'traffic is being fetched already; try again when it is done' }
+      if (!loadPlugins(file).some((p) => p.plugin?.manifest.analytics)) return { status: 409, error: 'no analytics plugin in this project' }
+      const error = await refreshTraffic(r.range)
+      return error ? { status: 502, error } : { status: 200, key: `${r.range.from}..${r.range.to}` }
+    },
     /** Settle an open question; false if there is no such question (already answered, say). */
     answer(id: string, answer: Answer) {
       const open = asks.get(id)

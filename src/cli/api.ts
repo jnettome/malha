@@ -85,7 +85,8 @@ export function createApi(file: string, opts: ApiOptions = {}): Api {
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) return 'wrong token'
   }
 
-  function answer(req: IncomingMessage, res: ServerResponse) {
+  /** A small JSON body from a page this server served (see answerAllowed). */
+  function readBody(req: IncomingMessage, res: ServerResponse, then: (body: Record<string, unknown>) => void) {
     const refused = answerAllowed(req)
     if (refused) return json(res, 403, { error: refused })
     let body = ''
@@ -95,15 +96,30 @@ export function createApi(file: string, opts: ApiOptions = {}): Api {
       if (body.length > 4096) req.destroy()
     })
     req.on('end', () => {
-      let parsed: { id?: unknown; answer?: unknown }
+      let parsed: unknown
       try {
-        parsed = JSON.parse(body) as typeof parsed
+        parsed = JSON.parse(body)
       } catch {
         return json(res, 400, { error: 'not JSON' })
       }
-      const { id, answer: a } = parsed
+      if (!parsed || typeof parsed !== 'object') return json(res, 400, { error: 'not a JSON object' })
+      then(parsed as Record<string, unknown>)
+    })
+  }
+
+  function answer(req: IncomingMessage, res: ServerResponse) {
+    readBody(req, res, ({ id, answer: a }) => {
       if (typeof id !== 'string' || (a !== 'once' && a !== 'always' && a !== 'deny')) return json(res, 400, { error: 'want { id, answer: once | always | deny }' })
       json(res, live?.answer(id, a) ? 200 : 404, { ok: true })
+    })
+  }
+
+  /** Fetch a date range of traffic for the page's picker; answers when it is written. */
+  function fetchRange(req: IncomingMessage, res: ServerResponse) {
+    readBody(req, res, ({ from, to }) => {
+      if (typeof from !== 'string' || typeof to !== 'string') return json(res, 400, { error: 'want { from, to } as YYYY-MM-DD' })
+      if (!live) return json(res, 409, { error: 'plugins are off: start malha dev without --no-plugins to fetch traffic' })
+      void live.fetchRange(from, to).then(({ status, ...body }) => json(res, status, body))
     })
   }
 
@@ -139,6 +155,10 @@ export function createApi(file: string, opts: ApiOptions = {}): Api {
       }
       if (path === 'api/answer' && req.method === 'POST') {
         answer(req, res)
+        return true
+      }
+      if (path === 'api/analytics/range' && req.method === 'POST') {
+        fetchRange(req, res)
         return true
       }
       if (path === 'api/events') {

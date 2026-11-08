@@ -140,7 +140,7 @@ test('the Traffic tab shows every site, its trend, and what could not be read', 
   try {
     const errors = collectErrors(page)
     await page.goto(`http://127.0.0.1:${port}/#traffic`)
-    await expect(page.locator('.traffic h1')).toHaveText(/visitors across 3 sites in 30 days/)
+    await expect(page.locator('.traffic h1')).toHaveText(/visitors across 3 sites in the last 30 days/)
     await expect(page.locator('.tsite:not(.tsite--head)')).toHaveCount(4)
     await expect(page.locator('.tsite:not(.tsite--head)').first()).toContainText('Shop')
     // The drop the checks flag is flagged here too.
@@ -151,9 +151,33 @@ test('the Traffic tab shows every site, its trend, and what could not be read', 
       await page.mouse.move(spark!.x + spark!.width / 2, spark!.y + spark!.height / 2)
       await expect(page.locator('.chart__tip').first()).toHaveText(/Oct \d+ · [\d,]+ visitors/)
     }
-    await page.locator('.tsite', { hasText: 'Shop' }).click()
-    await expect(page.locator('.insp__section', { hasText: 'Traffic · 30 days' })).toContainText('Google Analytics 312345678')
     expect(await overflowing(page)).toEqual([])
+
+    // Another period: kept in the address.
+    await page.getByRole('button', { name: '90 days' }).click()
+    await expect(page.locator('.traffic h1')).toHaveText(/in the last 90 days/)
+    await expect(page).toHaveURL(/#traffic\?p=90d$/)
+
+    // A site's own page, in the same period, with links to each source's dashboard.
+    await page.locator('.tsite', { hasText: 'Shop' }).click()
+    await expect(page.locator('.traffic h1')).toHaveText('Shop')
+    await expect(page).toHaveURL(/#traffic\/shop\?p=90d$/)
+    await expect(page.locator('.tile', { hasText: 'Bounce rate' })).toContainText('41%')
+    await expect(page.locator('.chart__legend').first()).toContainText('Last 90 days')
+    await expect(page.locator('.tlinks .tlink').first()).toHaveAttribute('href', 'https://analytics.google.com/analytics/web/#/p312345678/reports/intelligenthome')
+    await expect(page.locator('.tpanel', { hasText: 'Browsers' })).toContainText('Chrome')
+    await expect(page.locator('table.matrix').first()).toContainText('acme kettle')
+    await page.getByRole('button', { name: 'pageviews' }).click()
+    await expect(page.locator('.tpanel--chart h2').first()).toHaveText('Pageviews per day')
+    expect(await overflowing(page)).toEqual([])
+
+    // Back to every site, and the app panel links to the page too.
+    await page.goBack()
+    await expect(page.locator('.traffic h1')).toHaveText(/in the last 90 days/)
+    await page.locator('.tsite', { hasText: 'Status page' }).click()
+    await page.getByRole('button', { name: 'Show its machines' }).click()
+    await expect(page.locator('.insp__section', { hasText: 'Traffic · last 90 days' })).toContainText('Umami')
+    await expect(page.locator('.insp__section a.tlink')).toHaveAttribute('href', 'https://umami.acme.example/websites/7b8f1c2e-5a44-4d1e-9c3a-2f6e8d0b1a55')
     expect(errors).toEqual([])
   } finally {
     server.kill()

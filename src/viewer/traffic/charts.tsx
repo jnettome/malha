@@ -20,8 +20,8 @@ const describe = (points: Point[], unit: string) => {
   return `${unit} per day from ${shortDate(points[0].date)} to ${shortDate(points.at(-1)!.date)}; most on ${shortDate(peak.date)}, ${fmtFull(peak.value)}`
 }
 
-function paths(points: Point[], w: number, h: number, pad: number) {
-  const max = Math.max(1, ...points.map((p) => p.value))
+function paths(points: Point[], w: number, h: number, pad: number, top?: number) {
+  const max = top ?? Math.max(1, ...points.map((p) => p.value))
   const x = (i: number) => pad + (points.length < 2 ? (w - pad * 2) / 2 : (i * (w - pad * 2)) / (points.length - 1))
   const y = (v: number) => h - pad - (v / max) * (h - pad * 2)
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(2)},${y(p.value).toFixed(2)}`).join('')
@@ -82,6 +82,69 @@ export function SeriesChart({ points, unit, height = 120 }: { points: Point[]; u
       <div className="chart__axis">
         <span>{shortDate(points[0].date)}</span>
         <span>{shortDate(points.at(-1)!.date)}</span>
+      </div>
+    </div>
+  )
+}
+
+/** This period's daily values against the previous period's, day by day: a solid line in the chart
+ *  hue and a dashed neutral one, on one axis, with a legend and a crosshair that reads both. */
+export function CompareChart({ now, before, unit, labels, totals, height = 180 }: { now: Point[]; before?: Point[]; unit: string; labels: [string, string]; totals?: [number | undefined, number | undefined]; height?: number }) {
+  const [hover, setHover] = useState<number | null>(null)
+  const W = 600
+  const prev = before?.length ? before.slice(0, now.length) : undefined
+  const top = Math.max(1, ...now.map((p) => p.value), ...(prev ?? []).map((p) => p.value))
+  const cur = paths(now, W, height, 4, top)
+  // The previous period sits under the same x positions as this one: day 1 under day 1.
+  const old = prev ? paths(prev, W, height, 4, top) : undefined
+  const oldLine = prev && old ? prev.map((p, i) => `${i ? 'L' : 'M'}${cur.x(i).toFixed(2)},${old.y(p.value).toFixed(2)}`).join('') : ''
+  if (!now.length) return null
+  const p = hover === null ? undefined : now[hover]
+  const b = hover === null ? undefined : prev?.[hover]
+  // Unique visitors don't add up across days (a returning visitor counts on each day), so the
+  // legend shows the period totals when they are given, and the sum of the days otherwise.
+  const total = (list: Point[], i: 0 | 1) => totals?.[i] ?? list.reduce((n, x) => n + x.value, 0)
+  return (
+    <div className="chart chart--compare">
+      <div className="chart__legend">
+        <span>
+          <i className="chart__key" /> {labels[0]} · {fmtFull(total(now, 0))}
+        </span>
+        {prev && (
+          <span>
+            <i className="chart__key chart__key--before" /> {labels[1]} · {fmtFull(total(prev, 1))}
+          </span>
+        )}
+      </div>
+      <div className="chart__plot" style={{ height }} onMouseMove={(e) => setHover(indexAt(e, now.length))} onMouseLeave={() => setHover(null)}>
+        <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" role="img" aria-label={`${describe(now, unit)}${prev ? `; ${fmtFull(total(prev, 1))} the period before` : ''}`}>
+          <line x1="0" x2={W} y1={cur.y(top)} y2={cur.y(top)} className="chart__grid" />
+          <line x1="0" x2={W} y1={height - 4} y2={height - 4} className="chart__base" />
+          <path d={cur.area} className="chart__area" />
+          {oldLine && <path d={oldLine} className="chart__line chart__line--before" />}
+          <path d={cur.line} className="chart__line" />
+          {p && <line x1={cur.x(hover!)} x2={cur.x(hover!)} y1="0" y2={height} className="chart__cross" />}
+        </svg>
+        <span className="chart__max">{fmt(top)}</span>
+        {p && (
+          <>
+            <i className="chart__dot-html" style={{ left: `${(cur.x(hover!) / W) * 100}%`, top: `${(cur.y(p.value) / height) * 100}%` }} />
+            <span className="chart__tip chart__tip--two" style={{ left: `${(cur.x(hover!) / W) * 100}%` }}>
+              <span>
+                {shortDate(p.date)} · {fmtFull(p.value)} {unit}
+              </span>
+              {b && (
+                <span className="chart__tip-before">
+                  {shortDate(b.date)} · {fmtFull(b.value)}
+                </span>
+              )}
+            </span>
+          </>
+        )}
+      </div>
+      <div className="chart__axis">
+        <span>{shortDate(now[0].date)}</span>
+        <span>{shortDate(now.at(-1)!.date)}</span>
       </div>
     </div>
   )

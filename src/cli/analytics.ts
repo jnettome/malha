@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { change, mainResult, ranges, sourceId, unlistedHosts, type AnalyticsCache, type AnalyticsRequest, type AnalyticsSource, type Provider, type Trackers, type SourceResult, type TopItem } from '../core/analytics.ts'
+import { change, customRange, DEFAULT_PERIOD, isRelative, mainResult, MAX_CUSTOM, normalizeAnalytics, pickPeriod, PRESETS, rangeKey, ranges, sourceId, TOP_LISTS, unlistedHosts, type AnalyticsCache, type AnalyticsFile, type AnalyticsRequest, type AnalyticsSource, type DateRange, type Provider, type SourceResult, type TopItem, type Trackers } from '../core/analytics.ts'
 import { runPlugin, Session, type Asker } from '../plugins/host.ts'
 import { loadPlugins, type Resolved } from '../plugins/project.ts'
 import type { LinkResult } from '../plugins/sdk.ts'
@@ -12,9 +12,9 @@ import { findTrackers } from './trackers.ts'
 
 export const analyticsPath = (file: string) => join(stateDir(file), 'analytics.json')
 
-export function readAnalytics(file: string): AnalyticsCache | null {
+export function readAnalytics(file: string): AnalyticsFile | null {
   try {
-    return existsSync(analyticsPath(file)) ? (JSON.parse(readFileSync(analyticsPath(file), 'utf8')) as AnalyticsCache) : null
+    return existsSync(analyticsPath(file)) ? normalizeAnalytics(JSON.parse(readFileSync(analyticsPath(file), 'utf8'))) : null
   } catch {
     return null
   }
@@ -47,14 +47,19 @@ const search = (s: unknown) => {
     return { clicks: num(x.clicks) ?? 0, impressions: num(x.impressions) ?? 0, ctr: ratio(x.ctr) ?? 0, position: num(x.position) ?? 0 }
   }
   const rows = (list: unknown) => (Array.isArray(list) ? list.slice(0, 25).flatMap((x) => (text(x?.key) ? [{ key: text(x.key)!, ...st(x) }] : [])) : [])
+  const points = (list: unknown) => (Array.isArray(list) ? list.slice(0, 400).flatMap((p) => (day(p?.date) ? [{ date: p.date as string, clicks: num(p.clicks) ?? 0, impressions: num(p.impressions) ?? 0 }] : [])) : undefined)
   return {
     totals: st(o.totals),
     previous: o.previous ? st(o.previous) : undefined,
-    series: Array.isArray(o.series) ? o.series.slice(0, 400).flatMap((p) => (day(p?.date) ? [{ date: p.date, clicks: num(p.clicks) ?? 0, impressions: num(p.impressions) ?? 0 }] : [])) : [],
+    series: points(o.series) ?? [],
+    previousSeries: points(o.previousSeries),
     queries: rows(o.queries),
     pages: rows(o.pages),
   }
 }
+
+const series = (list: unknown) =>
+  Array.isArray(list) ? list.slice(0, 400).flatMap((p: Record<string, unknown>) => (day(p?.date) ? [{ date: p.date as string, visitors: num(p.visitors), pageviews: num(p.pageviews) }] : [])) : undefined
 
 export function cleanResults(raw: unknown, request: AnalyticsRequest): SourceResult[] {
   const asked = new Map(request.sources.map((s) => [`${s.app}|${sourceId(s)}`, s]))
@@ -77,8 +82,9 @@ export function cleanResults(raw: unknown, request: AnalyticsRequest): SourceRes
       note: text(r.note),
       totals: totals(r.totals),
       previous: totals(r.previous),
-      series: Array.isArray(r.series) ? r.series.slice(0, 400).flatMap((p: Record<string, unknown>) => (day(p?.date) ? [{ date: p.date as string, visitors: num(p.visitors), pageviews: num(p.pageviews) }] : [])) : undefined,
-      top: r.top ? { pages: top(r.top.pages), referrers: top(r.top.referrers), countries: top(r.top.countries), devices: top(r.top.devices) } : undefined,
+      series: series(r.series),
+      previousSeries: series(r.previousSeries),
+      top: r.top ? Object.fromEntries(TOP_LISTS.map((k) => [k, top(r.top![k])])) : undefined,
       allHosts: top(r.allHosts),
       search: source.provider === 'search-console' ? search(r.search) : undefined,
     })
@@ -88,14 +94,16 @@ export function cleanResults(raw: unknown, request: AnalyticsRequest): SourceRes
 }
 
 export interface RefreshOptions {
-  days: number
+  /** Periods to fetch: a number of days ending yesterday, or a fixed range. Default: the presets
+   *  (7, 30 and 90 days) and any other number of days already in the file. */
+  periods?: (number | DateRange)[]
   timezone: string
   asker?: Asker
   session?: Session
   log?: (line: string) => void
+  today?: Date
 }
 
-/** Ask each analytics plugin for its sources' traffic and write .malha/analytics.json. */
 /** Where an app's Umami script comes from, put the way options.hosts wants it. */
 function umamiServers(t: Trackers): string {
   const where = new Set<string>()
@@ -122,16 +130,53 @@ function posthogWhere(t: Trackers): string {
   return own ? ` (${own})` : ''
 }
 
-export async function refreshAnalytics(file: string, opts: RefreshOptions): Promise<AnalyticsCache> {
+/** The server a plugin reads by default (its first options.hosts), for links to the dashboard. */
+const defaultHost = (plugin: Resolved) => [plugin.entry.options?.hosts ?? []].flat().map(String).find((h) => /^https?:\/\/[^/\s?#]+\/?$/.test(h))?.replace(/\/+$/, '')
+
+/** Ask each analytics plugin for every period's traffic, and write them into .malha/analytics.json
+ *  beside the periods already there. */
+export async function refreshAnalytics(file: string, opts: RefreshOptions): Promise<AnalyticsFile> {
+  const before = readAnalytics(file)
+  const relative = new Set([...PRESETS, ...(before?.periods ?? []).filter((p) => isRelative(p.key)).map((p) => p.days)])
+  const wanted = opts.periods ?? [...relative].sort((a, b) => a - b)
+  const session = opts.session ?? new Session()
+  const fetched: AnalyticsCache[] = []
+  for (const period of wanted) fetched.push(await fetchPeriod(file, period, { ...opts, session }))
+  const keys = new Set(fetched.map((p) => p.key))
+  const kept = (before?.periods ?? []).filter((p) => !keys.has(p.key))
+  const custom = [...kept, ...fetched].filter((p) => !isRelative(p.key)).sort((a, b) => b.fetched.localeCompare(a.fetched)).slice(0, MAX_CUSTOM)
+  const periods = [...kept, ...fetched].filter((p) => isRelative(p.key) || custom.includes(p)).sort((a, b) => Number(isRelative(b.key)) - Number(isRelative(a.key)) || a.days - b.days || a.range.from.localeCompare(b.range.from))
+  const out: AnalyticsFile = { version: 2, periods }
+  mkdirSync(stateDir(file), { recursive: true })
+  if (!existsSync(join(stateDir(file), '.gitignore'))) writeFileSync(join(stateDir(file), '.gitignore'), '*\n')
+  writeFileSync(analyticsPath(file), `${JSON.stringify(out)}\n`)
+  return out
+}
+
+/** One period: every source, through its provider's plugin. */
+async function fetchPeriod(file: string, period: number | DateRange, opts: RefreshOptions & { session: Session }): Promise<AnalyticsCache> {
   const { data, errors } = loadTopology(file)
   if (!data) throw new Error(`${display(file)} is invalid: ${errors[0]}`)
   const log = opts.log ?? ((l: string) => console.log(l))
-  const { range, previous } = ranges(opts.days)
+  let key: string
+  let days: number
+  let range: DateRange
+  let previous: DateRange
+  if (typeof period === 'number') {
+    ;({ range, previous } = ranges(period, opts.today))
+    key = `${period}d`
+    days = period
+  } else {
+    const r = customRange(period.from, period.to, opts.today)
+    if ('error' in r) throw new Error(`${period.from} to ${period.to}: ${r.error}`)
+    ;({ range, previous, days } = r)
+    key = rangeKey(range)
+  }
   const byProvider = pluginsByProvider(file)
   const sources = (data.apps ?? []).flatMap((a) => (a.analytics ?? []).map((s) => ({ ...s, app: a.id, hostnames: a.domains ?? [] })))
   if (!sources.length) throw new Error('No app lists analytics sources yet. Run malha analytics detect, or add them under each app (docs/analytics.md).')
   const results: SourceResult[] = []
-  const session = opts.session ?? new Session()
+  const session = opts.session
   for (const provider of new Set(sources.map((s) => s.provider))) {
     const mine = sources.filter((s) => s.provider === provider)
     const plugin = byProvider.get(provider)
@@ -141,18 +186,15 @@ export async function refreshAnalytics(file: string, opts: RefreshOptions): Prom
     }
     const request: AnalyticsRequest = { range, previous, timezone: opts.timezone, sources: mine }
     try {
-      log(c.dim(`${plugin.name}: ${mine.length} ${provider} source(s)…`))
+      log(c.dim(`${plugin.name}: ${mine.length} ${provider} source(s), ${range.from} to ${range.to}…`))
       const raw = await runPlugin({ file, plugin, run: { kind: 'analytics' }, input: request, asker: opts.asker ?? terminalAsker(), session, output: pluginLine(plugin.name), timeoutMs: 300_000 })
-      results.push(...cleanResults(raw, request))
+      const host = provider === 'umami' || provider === 'posthog' ? defaultHost(plugin) : undefined
+      results.push(...cleanResults(raw, request).map((r) => (host && !r.host ? { ...r, host } : r)))
     } catch (e) {
       for (const s of mine) results.push({ app: s.app, provider, id: String(s.id), host: s.host, primary: s.primary, ok: false, error: (e as Error).message })
     }
   }
-  const cache: AnalyticsCache = { fetched: new Date().toISOString(), days: opts.days, range, previous, results }
-  mkdirSync(stateDir(file), { recursive: true })
-  if (!existsSync(join(stateDir(file), '.gitignore'))) writeFileSync(join(stateDir(file), '.gitignore'), '*\n')
-  writeFileSync(analyticsPath(file), `${JSON.stringify(cache, null, 2)}\n`)
-  return cache
+  return { key, fetched: new Date().toISOString(), days, range, previous, results }
 }
 
 const fmt = (n: number | undefined) => (n === undefined ? '—' : n >= 10_000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n)))
@@ -185,23 +227,40 @@ export function printSummary(cache: AnalyticsCache, apps: { id: string; name: st
   }
 }
 
-export async function analytics(file: string, sub: string | undefined, opts: { days: number; timezone: string; yes: boolean; dryRun: boolean }) {
+export interface AnalyticsOptions {
+  /** A number of days ending yesterday, or a fixed range (from and to), to fetch or to show. */
+  days?: number
+  from?: string
+  to?: string
+  timezone: string
+  yes: boolean
+  dryRun: boolean
+}
+
+export async function analytics(file: string, sub: string | undefined, opts: AnalyticsOptions) {
   const { data, errors } = loadTopology(file)
   if (!data) throw new Error(`${display(file)} is invalid: ${errors[0]}`)
   const apps = data.apps ?? []
+  if ((opts.from === undefined) !== (opts.to === undefined)) throw new Error('--from and --to go together')
+  if (opts.from && opts.days) throw new Error('give --days, or --from and --to, not both')
+  const asked: number | DateRange | undefined = opts.from ? { from: opts.from, to: opts.to! } : opts.days
+  const keyOf = (p: number | DateRange) => (typeof p === 'number' ? `${p}d` : rangeKey(p))
   if (sub === 'refresh') {
-    const cache = await refreshAnalytics(file, { days: opts.days, timezone: opts.timezone })
-    printSummary(cache, apps)
-    console.log(c.dim(`\nWrote ${display(analyticsPath(file))}. The Traffic tab of malha dev shows it.`))
-    if (cache.results.every((r) => !r.ok)) process.exitCode = 1
+    const out = await refreshAnalytics(file, { periods: asked === undefined ? undefined : [asked], timezone: opts.timezone })
+    const shown = pickPeriod(out, asked === undefined ? DEFAULT_PERIOD : keyOf(asked))!
+    printSummary(shown, apps)
+    console.log(c.dim(`\nWrote ${display(analyticsPath(file))}: ${out.periods.map((p) => p.key).join(', ')}. The Traffic tab of malha dev shows it.`))
+    if (shown.results.every((r) => !r.ok)) process.exitCode = 1
     return
   }
   if (sub === 'detect') return detect(file, opts)
   if (sub && sub !== 'show') throw new Error('usage: malha analytics [show|refresh|detect] [file]')
-  const cache = readAnalytics(file)
+  const all = readAnalytics(file)
+  const cache = pickPeriod(all, asked === undefined ? undefined : keyOf(asked))
   if (!cache) return console.log(`No traffic yet. Run: malha analytics refresh ${display(file)}`)
+  if (asked !== undefined && cache.key !== keyOf(asked)) return console.log(`No ${keyOf(asked)} period yet. Run: malha analytics refresh ${display(file)} ${typeof asked === 'number' ? `--days ${asked}` : `--from ${asked.from} --to ${asked.to}`}`)
   printSummary(cache, apps)
-  console.log(c.dim(`\nFetched ${cache.fetched.replace('T', ' ').slice(0, 16)} UTC.`))
+  console.log(c.dim(`\nFetched ${cache.fetched.replace('T', ' ').slice(0, 16)} UTC. Periods: ${all!.periods.map((p) => p.key).join(', ')}.`))
 }
 
 /** Find trackers on each app's pages, let the plugins match them to sources, and propose them. */

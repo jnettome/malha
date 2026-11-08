@@ -9,7 +9,8 @@ import { SEVERITIES } from '../../core/security.ts'
 import { KINDS, NODE_KIND_LABEL, STATUS_LABEL } from './kinds.ts'
 import { FrontPanel, KindSwatch, Led, Meter, PodGrid } from './parts.tsx'
 import { BarList, SeriesChart } from '../traffic/charts.tsx'
-import { fmtFull, PROVIDER_LABEL, siteRows, useAnalytics } from '../traffic/data.ts'
+import { panelUrl, pickPeriod, sourceId } from '../../core/analytics.ts'
+import { fmtFull, periodLabel, PROVIDER_LABEL, siteRows, useAnalytics } from '../traffic/data.ts'
 import { useUi } from './state.tsx'
 import { useLiveNode } from '../live.ts'
 
@@ -299,7 +300,7 @@ function AppDetail({ app }: { app: App }) {
 
 function AppTraffic({ app }: { app: App }) {
   const ui = useUi()
-  const data = useAnalytics()
+  const data = pickPeriod(useAnalytics(), ui.traffic.period)
   if (!data) return null
   const mine = data.results.filter((r) => r.app === app.id)
   const row = siteRows({ ...data, results: mine })[0]
@@ -308,7 +309,7 @@ function AppTraffic({ app }: { app: App }) {
   const others = mine.filter((r) => r.ok && r.totals && r.provider !== 'search-console' && r.provider !== main?.provider)
   const s = row.search?.search
   return (
-    <Section title={`Traffic · ${data.days} days`}>
+    <Section title={`Traffic · ${periodLabel(data).toLowerCase()}`}>
       {main?.totals && (
         <>
           <Spec
@@ -339,8 +340,20 @@ function AppTraffic({ app }: { app: App }) {
           {PROVIDER_LABEL[f.provider]} {f.id}: {f.ok ? f.note : f.error}
         </p>
       ))}
-      <button className="btn" onClick={() => ui.setView('traffic')}>
-        Open in Traffic
+      <div className="tlinks">
+        {mine
+          .filter((r, i) => mine.findIndex((x) => sourceId(x) === sourceId(r)) === i)
+          .map((r) => {
+            const url = panelUrl(r, data.range)
+            return url ? (
+              <a key={sourceId(r)} className="tlink" href={url} target="_blank" rel="noopener noreferrer">
+                {PROVIDER_LABEL[r.provider]} ↗
+              </a>
+            ) : null
+          })}
+      </div>
+      <button className="btn" onClick={() => ui.openTraffic({ app: app.id, period: ui.traffic.period })}>
+        All its traffic
       </button>
     </Section>
   )

@@ -56,7 +56,7 @@ Editors with the YAML language server (VS Code, Cursor) read `topology.schema.js
 | `malha validate [file]` | Checks the schema, every cross-reference and the [standards](#what-validate-checks). Exits 1 on errors. | `--strict` also fails on warnings |
 | `malha build [file]` | A static site with the data inside `index.html`, for any static web server. | `--out malha-site`, `--no-scan` |
 | `malha scan [file]` | Scans the dependencies behind every app. See [Dependency scan](#dependency-scan). | `--code-dir <dir>` (or `$MALHA_CODE_DIR`), `--app <id>` (repeatable), `--no-fetch`, `--offline` |
-| `malha analytics [refresh\|detect] [file]` | Traffic per app, from the analytics plugins. See [Traffic](#traffic). | `--days 30`, `--timezone`, `--dry-run`, `--yes` |
+| `malha analytics [refresh\|detect] [file]` | Traffic per app, from the analytics plugins. See [Traffic](#traffic). | `--days N`, `--from`/`--to`, `--timezone`, `--dry-run`, `--yes` |
 | `malha check [file]` | What needs a person, by area. Exits 1 on critical findings. See [Checks and alerts](#checks-and-alerts). | `--live`, `--notify`, `--digest`, `--json`, `--fail-on critical\|warning\|none`, `--vulns critical\|high\|medium` |
 | `malha schema [dir]` | Writes `topology.schema.json` for editor autocomplete. | |
 | `malha <plugin> <command> [file]` | Runs a plugin's command and shows the changes it proposes as a diff. See [Plugins](#plugins). | `--dry-run`, `--yes` (write without asking), `-- <plugin args>` |
@@ -270,12 +270,12 @@ The Traffic tab puts every site's visitors and search traffic in one place. Plug
 ```bash
 malha plugin add google infra/topology.yaml    # or umami, posthog
 malha analytics detect infra/topology.yaml     # finds the trackers on each app's pages; proposes its analytics sources
-malha analytics refresh infra/topology.yaml    # the last 30 days, into .malha/analytics.json
+malha analytics refresh infra/topology.yaml    # the last 7, 30 and 90 days, into .malha/analytics.json
 ```
 
 ![The Traffic tab](docs/traffic.png)
 
-`malha check` flags sites whose traffic falls by half or stops. Setup for each provider, and what each number means: [docs/analytics.md](docs/analytics.md).
+Pick the last 7, 30 or 90 days, or any range; click a site for everything about it, against the previous period, with links to each source's own dashboard. `malha check` flags sites whose traffic falls by half or stops. Setup for each provider, and what each number means: [docs/analytics.md](docs/analytics.md).
 
 ## Domains and DNS
 

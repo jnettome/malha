@@ -80,27 +80,39 @@ async function one(ctx, list, source, req) {
     const [[visitors, pageviews, sessions] = []] = await q(`SELECT count(DISTINCT person_id), count(), count(DISTINCT properties.$session_id) FROM events WHERE ${where(r)}`)
     return { visitors: Number(visitors) || 0, pageviews: Number(pageviews) || 0, sessions: Number(sessions) || 0 }
   }
-  const topOf = async (expr, also = '') => (await q(`SELECT ${expr} AS k, count() AS v FROM events WHERE ${where(req.range)}${also} GROUP BY k ORDER BY v DESC LIMIT 10`)).map(([k, v]) => ({ key: String(k ?? '(none)'), value: Number(v) || 0 }))
+  // Each list in the unit the viewer shows: pages in views, referrers in visits, the rest in visitors.
+  const VIEWS = 'count()'
+  const VISITS = 'count(DISTINCT properties.$session_id)'
+  const PEOPLE = 'count(DISTINCT person_id)'
+  const topOf = async (expr, measure, also = '') => (await q(`SELECT ${expr} AS k, ${measure} AS v FROM events WHERE ${where(req.range)}${also} GROUP BY k ORDER BY v DESC LIMIT 10`)).map(([k, v]) => ({ key: String(k ?? '(none)'), value: Number(v) || 0 }))
   // Moving between the app's own pages isn't a referral.
   const self = hostMatch('properties.$referring_domain', source.hostnames)
   // The first query finds the key that can read this project; the rest go in parallel with it.
   const totals = await totalsOf(req.range)
-  const [previous, series, pages, referrers, countries, devices] = await Promise.all([
+  const seriesOf = (r) => q(`SELECT toDate(timestamp) AS d, count(DISTINCT person_id), count() FROM events WHERE ${where(r)} GROUP BY d ORDER BY d`)
+  const [previous, series, previousSeries, pages, referrers, countries, devices, browsers, os] = await Promise.all([
     totalsOf(req.previous),
-    q(`SELECT toDate(timestamp) AS d, count(DISTINCT person_id), count() FROM events WHERE ${where(req.range)} GROUP BY d ORDER BY d`),
-    topOf('properties.$pathname'),
-    topOf("if(properties.$referring_domain = '$direct', '(direct)', properties.$referring_domain)", self ? ` AND NOT ifNull(${self}, 0)` : ''),
-    topOf('properties.$geoip_country_code'),
-    topOf('properties.$device_type'),
+    seriesOf(req.range),
+    seriesOf(req.previous),
+    topOf('properties.$pathname', VIEWS),
+    topOf("if(properties.$referring_domain = '$direct', '(direct)', properties.$referring_domain)", VISITS, self ? ` AND NOT ifNull(${self}, 0)` : ''),
+    topOf('properties.$geoip_country_code', PEOPLE),
+    topOf('properties.$device_type', PEOPLE),
+    topOf('properties.$browser', PEOPLE),
+    topOf('properties.$os', PEOPLE),
   ])
   // Every hostname in the project, unfiltered, so Malha can say which ones no app lists.
   const allHosts = (await q(`SELECT properties.$host AS k, count() AS v FROM events WHERE event = '$pageview' AND ${between(req.range)} GROUP BY k ORDER BY v DESC LIMIT 25`)).map(([k, v]) => ({ key: String(k ?? ''), value: Number(v) || 0 })).filter((h) => h.key)
-  const byDay = new Map(series.map(([d, v, p]) => [String(d).slice(0, 10), { visitors: Number(v) || 0, pageviews: Number(p) || 0 }]))
-  const days = []
-  for (let t = Date.parse(`${req.range.from}T00:00:00Z`); t <= Date.parse(`${req.range.to}T00:00:00Z`); t += 86_400_000) {
-    const date = new Date(t).toISOString().slice(0, 10)
-    days.push({ date, ...(byDay.get(date) ?? { visitors: 0, pageviews: 0 }) })
+  const everyDay = (range, rows) => {
+    const byDay = new Map(rows.map(([d, v, p]) => [String(d).slice(0, 10), { visitors: Number(v) || 0, pageviews: Number(p) || 0 }]))
+    const out = []
+    for (let t = Date.parse(`${range.from}T00:00:00Z`); t <= Date.parse(`${range.to}T00:00:00Z`); t += 86_400_000) {
+      const date = new Date(t).toISOString().slice(0, 10)
+      out.push({ date, ...(byDay.get(date) ?? { visitors: 0, pageviews: 0 }) })
+    }
+    return out
   }
+  const days = everyDay(req.range, series)
   // No pageview anywhere in the project: say what it does collect, which is usually the reason.
   let note
   if (!totals.pageviews && !allHosts.length) {
@@ -109,7 +121,7 @@ async function one(ctx, list, source, req) {
       ? `no $pageview events in this period, only ${events.map(([k, v]) => `${k} (${Number(v) || 0})`).join(', ')}: turn on capture_pageview in posthog-js, or this project measures something else`
       : 'no events at all in this period: check that the snippet is on the live site and sends to this project'
   }
-  return { totals, previous, series: days, top: { pages, referrers, countries, devices }, allHosts, ...(note ? { note } : {}) }
+  return { totals, previous, series: days, previousSeries: everyDay(req.previous, previousSeries), top: { pages, referrers, countries, devices, browsers, os }, allHosts, ...(note ? { note } : {}) }
 }
 
 export default {

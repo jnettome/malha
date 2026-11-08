@@ -10,6 +10,9 @@ Traffic: every site's visitors and search in one place.
 - New plugins: `umami` (cloud or self-hosted, Umami 2 and 3), `google` (GA4 and Search Console with one read-only service account, its token signed in the sandbox), `posthog` (cloud or self-hosted, counted per app hostname, one key per account when your projects are spread over several).
 - An app with several sites (whitelabels) can have a source per site; its numbers add them up. `refresh` names pageviews on hostnames no app lists, and PostHog projects that collect no pageviews.
 - New checks: `traffic-drop` (by half, by four fifths, or none for two days; search clicks too), `analytics-error`, `analytics-stale`.
+- Periods: every refresh fetches the last 7, 30 and 90 days; `--days N` and `--from`/`--to` fetch others, and `malha dev` fetches any range from the page. The period and the site are in the address.
+- A page for each site: sessions, pages per visit, bounce rate and visit length; a chart against the previous period; pages, referrers, countries, devices, browsers and operating systems; Search Console queries and pages with clicks, impressions, click rate and position. The overview gets a chart for all sites, and countries and devices.
+- Links that open each source in its own dashboard, built by Malha from the ids, not by plugins.
 - Apps take `analytics:` in the topology. Plugins can export `analytics()` and `link()`, and a fetch pattern's host can be `{options.<key>}`, filled from `malha.plugins.json` and approved as filled in.
 
 ## 0.5.0

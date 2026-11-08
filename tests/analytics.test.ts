@@ -6,7 +6,7 @@ import { parse } from 'yaml'
 import { analytics, cleanResults, readAnalytics, refreshAnalytics } from '../src/cli/analytics.ts'
 import { loadTopology } from '../src/cli/load.ts'
 import { scan, findTrackers, siteHosts } from '../src/cli/trackers.ts'
-import { mainResult, ranges, unlistedHosts, type AnalyticsCache, type AnalyticsRequest, type SourceResult } from '../src/core/analytics.ts'
+import { customRange, isRelative, mainResult, MAX_CUSTOM, normalizeAnalytics, panelUrl, pickPeriod, ranges, unlistedHosts, type AnalyticsCache, type AnalyticsRequest, type SourceResult } from '../src/core/analytics.ts'
 import { runChecks } from '../src/core/check.ts'
 import type { Topology } from '../src/core/types.ts'
 import { addPlugin, allowPlugin } from '../src/plugins/commands.ts'
@@ -172,7 +172,7 @@ describe('the posthog plugin', () => {
       expect(url).toBe('https://eu.posthog.com/api/projects/4242/query/')
       const q = JSON.parse(String(init.body)).query.query as string
       queries.push(q)
-      if (q.includes('count(DISTINCT properties.$session_id)')) return json({ results: [[q.includes('2026-10-29') ? 9 : 21, 60, 25]] })
+      if (q.startsWith('SELECT count(DISTINCT person_id), count(), count(DISTINCT properties.$session_id)')) return json({ results: [[q.includes('2026-10-29') ? 9 : 21, 60, 25]] })
       if (q.includes('toDate(timestamp)')) return json({ results: [['2026-11-02', 7, 20]] })
       if (q.includes('properties.$host AS k')) return json({ results: [['admin.acme.example', 50], ['old-admin.acme.example', 30], ['localhost', 99], [null, 5]] })
       return json({ results: [['/orders', 33]] })
@@ -182,6 +182,9 @@ describe('the posthog plugin', () => {
     expect(r.results[0].series?.[1]).toEqual({ date: '2026-11-02', visitors: 7, pageviews: 20 })
     expect(queries[0]).toContain("properties.$host IN ('admin.acme.example')")
     expect(queries[0]).toContain("endsWith(properties.$host, '.shop.acme.example')")
+    // Each list counts in its own unit: countries in people, referrers in visits.
+    expect(queries.find((q) => q.includes('$geoip_country_code'))).toContain('count(DISTINCT person_id) AS v')
+    expect(queries.find((q) => q.includes('$referring_domain'))).toContain('count(DISTINCT properties.$session_id) AS v')
     // Referrers leave out the app's own hostnames.
     expect(queries.find((q) => q.includes('$referring_domain'))).toContain("AND NOT ifNull((properties.$referring_domain IN ('admin.acme.example') OR endsWith(properties.$referring_domain, '.shop.acme.example')), 0)")
     expect(queries.join('\n')).not.toContain('DROP')
@@ -222,7 +225,7 @@ describe('the posthog plugin finds projects', () => {
     vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
       const q = JSON.parse(String(init.body)).query.query as string
       if (q.includes('SELECT event AS k')) return json({ results: [['$autocapture', 410], ['$screen', 12]] })
-      if (q.includes('count(DISTINCT properties.$session_id)')) return json({ results: [[0, 0, 0]] })
+      if (q.startsWith('SELECT count(DISTINCT person_id), count(), count(DISTINCT properties.$session_id)')) return json({ results: [[0, 0, 0]] })
       return json({ results: [] })
     })
     const r = (await runPlugin({ file, plugin: resolved('posthog', { hosts: ['https://us.posthog.com'] }), run: { kind: 'analytics' }, input: req([{ app: 'admin', provider: 'posthog', id: 9, hostnames: ['admin.acme.example'] }]), asker: yes })) as { results: SourceResult[] }
@@ -299,6 +302,16 @@ describe('the google plugin', () => {
     vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
       if (url === 'https://oauth2.googleapis.com/token') return token(String(init.body))
       expect(new Headers(init.headers).get('authorization')).toBe('Bearer goog')
+      // The second batch: the previous period's days, devices, browsers, operating systems.
+      if (url.endsWith(':batchRunReports') && JSON.parse(String(init.body)).requests[1]?.dimensions?.[0]?.name === 'deviceCategory')
+        return json({
+          reports: [
+            { rows: [{ dimensionValues: [{ value: '20261030' }], metricValues: [{ value: '90' }, { value: '200' }] }] },
+            { rows: [{ dimensionValues: [{ value: 'mobile' }], metricValues: [{ value: '200' }] }] },
+            { rows: [{ dimensionValues: [{ value: 'Chrome' }], metricValues: [{ value: '150' }] }] },
+            { rows: [{ dimensionValues: [{ value: 'Android' }], metricValues: [{ value: '120' }] }] },
+          ],
+        })
       if (url.endsWith(':batchRunReports'))
         return json({
           reports: [
@@ -309,7 +322,6 @@ describe('the google plugin', () => {
             { rows: [] },
           ],
         })
-      if (url.endsWith(':runReport')) return json({ rows: [{ dimensionValues: [{ value: 'mobile' }], metricValues: [{ value: '200' }] }] })
       if (url.includes('/searchAnalytics/query')) {
         expect(url).toContain('/sites/sc-domain%3Aacme.example/')
         const dims = JSON.parse(String(init.body)).dimensions
@@ -327,7 +339,10 @@ describe('the google plugin', () => {
       ]),
       asker: yes,
     })) as { results: SourceResult[] }
-    expect(r.results[0]).toMatchObject({ ok: true, totals: { visitors: 300, pageviews: 900, sessions: 400, bounce_rate: 0.4 }, previous: { visitors: 200 }, top: { pages: [{ key: '/', value: 500 }], devices: [{ key: 'mobile', value: 200 }] } })
+    expect(r.results[0]).toMatchObject({ ok: true, totals: { visitors: 300, pageviews: 900, sessions: 400, bounce_rate: 0.4 }, previous: { visitors: 200 }, top: { pages: [{ key: '/', value: 500 }], devices: [{ key: 'mobile', value: 200 }], browsers: [{ key: 'Chrome', value: 150 }], os: [{ key: 'Android', value: 120 }] } })
+    // The previous period, day by day, every day filled.
+    expect(r.results[0].previousSeries?.length).toBe(3)
+    expect(r.results[0].previousSeries?.find((p) => p.date === '2026-10-30')).toEqual({ date: '2026-10-30', visitors: 90, pageviews: 200 })
     expect(r.results[0].series?.find((p) => p.date === '2026-11-02')).toEqual({ date: '2026-11-02', visitors: 120, pageviews: 330 })
     expect(r.results[1]).toMatchObject({ ok: true, search: { totals: { clicks: 40, position: 7.5 }, queries: [{ key: 'acme kettle', clicks: 9 }] } })
   })
@@ -392,14 +407,34 @@ describe('malha analytics', () => {
     expect(after.apps!.find((a) => a.id === 'status')!.analytics).toEqual([{ provider: 'umami', id: UUID }])
   })
 
-  it('refresh writes every source, and says which have no plugin', async () => {
+  it('refresh fetches the last 7, 30 and 90 days, says which sources have no plugin, and notes each server', async () => {
     const file = await project()
     umamiServer()
-    const cache = await refreshAnalytics(file, { days: 7, timezone: 'UTC', asker: yes, log: () => undefined })
-    expect(readAnalytics(file)?.fetched).toBe(cache.fetched)
-    expect(cache.results.find((r) => r.provider === 'umami')).toMatchObject({ app: 'status', ok: true, totals: { visitors: 40 } })
-    expect(cache.results.find((r) => r.provider === 'ga4')).toMatchObject({ ok: false, error: expect.stringContaining('malha plugin add google') })
-    expect(cache.results.find((r) => r.provider === 'posthog')).toMatchObject({ ok: false, error: expect.stringContaining('malha plugin add posthog') })
+    const out = await refreshAnalytics(file, { timezone: 'UTC', asker: yes, log: () => undefined })
+    expect(out.periods.map((p) => p.key)).toEqual(['7d', '30d', '90d'])
+    expect(readAnalytics(file)).toEqual(out)
+    const month = pickPeriod(out)!
+    expect(month.key).toBe('30d')
+    // The server comes from options.hosts, for the link to its dashboard.
+    expect(month.results.find((r) => r.provider === 'umami')).toMatchObject({ app: 'status', ok: true, totals: { visitors: 40 }, host: 'https://u.acme.example' })
+    expect(month.results.find((r) => r.provider === 'ga4')).toMatchObject({ ok: false, error: expect.stringContaining('malha plugin add google') })
+    expect(month.results.find((r) => r.provider === 'posthog')).toMatchObject({ ok: false, error: expect.stringContaining('malha plugin add posthog') })
+  })
+
+  it('refresh adds a fixed range beside the others, and keeps the latest few', async () => {
+    const file = await project()
+    umamiServer()
+    const opts = { timezone: 'UTC', asker: yes, log: () => undefined, today: new Date('2026-11-04T12:00:00') }
+    await refreshAnalytics(file, { ...opts, periods: [30] })
+    const out = await refreshAnalytics(file, { ...opts, periods: [{ from: '2026-09-01', to: '2026-09-30' }] })
+    expect(out.periods.map((p) => p.key)).toEqual(['30d', '2026-09-01..2026-09-30'])
+    expect(out.periods[1]).toMatchObject({ days: 30, range: { from: '2026-09-01', to: '2026-09-30' }, previous: { from: '2026-08-02', to: '2026-08-31' } })
+    for (let m = 1; m <= MAX_CUSTOM; m++) await refreshAnalytics(file, { ...opts, periods: [{ from: `2025-0${m}-01`, to: `2025-0${m}-10` }] })
+    const keys = readAnalytics(file)!.periods.map((p) => p.key)
+    expect(keys.filter((k) => !isRelative(k))).toHaveLength(MAX_CUSTOM)
+    expect(keys).toContain('30d')
+    expect(keys).not.toContain('2026-09-01..2026-09-30')
+    await expect(refreshAnalytics(file, { ...opts, periods: [{ from: '2026-11-03', to: '2026-11-04' }] })).rejects.toThrow(/end by yesterday/)
   })
 
   it('keeps only what was asked for, in bounds', () => {
@@ -410,7 +445,7 @@ describe('malha analytics', () => {
 })
 
 describe('traffic checks', () => {
-  const base = (results: SourceResult[], fetched = '2026-11-04T06:00:00Z'): AnalyticsCache => ({ fetched, days: 30, ...ranges(30, new Date('2026-11-04T12:00:00Z')), results })
+  const base = (results: SourceResult[], fetched = '2026-11-04T06:00:00Z'): AnalyticsCache => ({ key: '30d', fetched, days: 30, ...ranges(30, new Date('2026-11-04T12:00:00Z')), results })
   const t = () => loadTopology(EXAMPLE).data!
   const today = new Date('2026-11-04T12:00:00')
   const traffic = (visitors: number, before: number, lastTwo = [5, 5]): SourceResult => ({ app: 'shop', provider: 'ga4', id: '1', ok: true, totals: { visitors }, previous: { visitors: before }, series: [{ date: '2026-11-02', visitors: lastTwo[0] }, { date: '2026-11-03', visitors: lastTwo[1] }] })
@@ -449,7 +484,8 @@ describe('apps with several sites', () => {
       totals: { visitors, pageviews: visitors * 2, sessions: visitors, bounce_rate: id === 'a' ? 0.2 : 0.6 },
       previous: { visitors: before },
       series: series.map((v, i) => ({ date: `2026-11-0${i + 1}`, visitors: v })),
-      top: { pages: [{ key: '/', value: visitors }] },
+      previousSeries: series.map((v, i) => ({ date: `2026-10-0${i + 1}`, visitors: v * 2 })),
+      top: { pages: [{ key: '/', value: visitors }], browsers: [{ key: 'Firefox', value: 1 }] },
     })
     const main = mainResult([
       ph('a', 300, 200, [1, 2]),
@@ -461,8 +497,85 @@ describe('apps with several sites', () => {
     expect(main.totals!.bounce_rate).toBeCloseTo(0.3)
     expect(main.series).toEqual([{ date: '2026-11-01', visitors: 11 }, { date: '2026-11-02', visitors: 22 }])
     expect(main.top?.pages).toEqual([{ key: '/', value: 400 }])
+    expect(main.top?.browsers).toEqual([{ key: 'Firefox', value: 2 }])
+    expect(main.previousSeries).toEqual([{ date: '2026-10-01', visitors: 22 }, { date: '2026-10-02', visitors: 44 }])
     expect(main.parts?.map((p) => p.id)).toEqual(['a', 'b'])
     // One source: returned as is.
     expect(mainResult([ph('a', 1, 1, [])])?.parts).toBeUndefined()
+  })
+})
+
+describe('periods', () => {
+  const r30 = ranges(30, new Date('2026-11-04T12:00:00'))
+  it('reads a file from 0.6, with one period at the top', () => {
+    const old = { fetched: '2026-11-04T06:00:00Z', days: 30, ...r30, results: [] }
+    expect(normalizeAnalytics(old)).toEqual({ version: 2, periods: [{ ...old, key: '30d' }] })
+    expect(normalizeAnalytics(null)).toBeNull()
+    expect(normalizeAnalytics({ nothing: true })).toBeNull()
+  })
+
+  it('picks the asked period, else the last 30 days, else the first relative one', () => {
+    const p = (key: string, days: number): AnalyticsCache => ({ key, days, fetched: '', ...r30, results: [] })
+    const file = { version: 2 as const, periods: [p('7d', 7), p('30d', 30), p('2026-09-01..2026-09-30', 30)] }
+    expect(pickPeriod(file, '7d')?.key).toBe('7d')
+    expect(pickPeriod(file, '14d')?.key).toBe('30d')
+    expect(pickPeriod({ version: 2, periods: [p('2026-09-01..2026-09-30', 30), p('7d', 7)] })?.key).toBe('7d')
+    expect(pickPeriod(null)).toBeUndefined()
+  })
+
+  it('checks a custom range, and finds the one before it', () => {
+    const today = new Date('2026-11-08T12:00:00')
+    expect(customRange('2026-10-01', '2026-10-31', today)).toEqual({ range: { from: '2026-10-01', to: '2026-10-31' }, previous: { from: '2026-08-31', to: '2026-09-30' }, days: 31 })
+    expect(customRange('2026-11-01', '2026-11-08', today)).toEqual({ error: 'the range must end by yesterday (2026-11-07): today is not over yet' })
+    expect(customRange('2026-02-30', '2026-03-01', today)).toEqual({ error: 'dates are YYYY-MM-DD' })
+    expect(customRange('2026-10-02', '2026-10-01', today)).toEqual({ error: 'the range starts after it ends' })
+    expect(customRange('2024-01-01', '2025-06-01', today)).toEqual({ error: 'a range is at most 366 days' })
+  })
+})
+
+describe('dashboard links', () => {
+  const range = { from: '2026-10-01', to: '2026-10-31' }
+  it('builds each provider’s link from the id alone, with the dates where it reads them', () => {
+    expect(panelUrl({ provider: 'ga4', id: '312345678' }, range)).toBe('https://analytics.google.com/analytics/web/#/p312345678/reports/intelligenthome')
+    expect(panelUrl({ provider: 'search-console', id: 'sc-domain:acme.example' }, range)).toBe('https://search.google.com/search-console/performance/search-analytics?resource_id=sc-domain%3Aacme.example&start_date=20261001&end_date=20261031')
+    expect(panelUrl({ provider: 'posthog', id: 4242, host: 'https://eu.posthog.com' }, range)).toBe('https://eu.posthog.com/project/4242/web?date_from=2026-10-01&date_to=2026-10-31')
+    expect(panelUrl({ provider: 'posthog', id: '4242' })).toBe('https://us.posthog.com/project/4242/web')
+    expect(panelUrl({ provider: 'umami', id: UUID, host: 'https://umami.acme.example' })).toBe(`https://umami.acme.example/websites/${UUID}`)
+    expect(panelUrl({ provider: 'umami', id: UUID, host: 'https://api.umami.is' })).toBe(`https://cloud.umami.is/websites/${UUID}`)
+  })
+
+  it('makes no link from an id or a server that would lead somewhere else', () => {
+    expect(panelUrl({ provider: 'ga4', id: '1/../../x' })).toBeUndefined()
+    expect(panelUrl({ provider: 'posthog', id: '1?next=https://evil.example' })).toBeUndefined()
+    expect(panelUrl({ provider: 'search-console', id: 'javascript:alert(1)' })).toBeUndefined()
+    expect(panelUrl({ provider: 'umami', id: UUID, host: 'javascript:alert(1)' })).toBeUndefined()
+    expect(panelUrl({ provider: 'umami', id: 'not-a-website-id', host: 'https://umami.acme.example' })).toBeUndefined()
+    // A server with a path is not a server: the default one is used.
+    expect(panelUrl({ provider: 'posthog', id: 7, host: 'https://evil.example/phish' })).toBe('https://us.posthog.com/project/7/web')
+  })
+})
+
+describe('the dev server fetches a range only for its own page', () => {
+  it('refuses other callers, bad bodies, and a server without plugins', async () => {
+    const { createServer } = await import('node:http')
+    const { createApi } = await import('../src/cli/api.ts')
+    const { file } = scratch()
+    const api = createApi(file, { plugins: false, loopback: true, log: () => undefined })
+    const server = createServer((rq, rs) => api.handle(rq, rs) || rs.writeHead(404).end())
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
+    const port = (server.address() as import('node:net').AddressInfo).port
+    const token = /content="([^"]+)"/.exec(api.injectToken('<head></head>'))![1]
+    const good = { host: `127.0.0.1:${port}`, origin: `http://127.0.0.1:${port}`, 'x-malha-token': token, 'content-type': 'application/json' }
+    const post = async (headers: Record<string, string>, body: unknown) =>
+      (await fetch(`http://127.0.0.1:${port}/api/analytics/range`, { method: 'POST', headers, body: JSON.stringify(body) })).status
+    try {
+      expect(await post({ ...good, 'x-malha-token': 'nope' }, { from: '2026-09-01', to: '2026-09-30' })).toBe(403)
+      expect(await post({ ...good, origin: 'http://evil.test' }, { from: '2026-09-01', to: '2026-09-30' })).toBe(403)
+      expect(await post(good, { from: 20260901 })).toBe(400)
+      expect(await post(good, { from: '2026-09-01', to: '2026-09-30' })).toBe(409)
+    } finally {
+      api.close()
+      server.close()
+    }
   })
 })

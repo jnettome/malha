@@ -1,38 +1,28 @@
+import { isRelative, pickPeriod, type AnalyticsCache } from '../../core/analytics.ts'
 import { model } from '../model/model.ts'
 import { useUi } from '../ui/state.tsx'
-import { BarList, Sparkline } from './charts.tsx'
-import { delta, fmt, fmtFull, mergeTop, PROVIDER_LABEL, shortDate, siteRows, useAnalytics, type SiteRow } from './data.ts'
+import { BarList, CompareChart, Sparkline } from './charts.tsx'
+import { addSeries, fmt, fmtFull, mergeTop, tidy, periodLabel, previousLabel, PROVIDER_LABEL, shortDate, siteRows, useAnalytics, type SiteRow } from './data.ts'
+import { Delta, Tile } from './parts.tsx'
+import { PeriodPicker } from './PeriodPicker.tsx'
+import { SiteView } from './SiteView.tsx'
 
-function Delta({ now, before }: { now?: number; before?: number }) {
-  const d = delta(now, before)
-  if (d.value === undefined) return <span className="delta">—</span>
-  const up = d.value >= 0
-  return (
-    <span className={`delta${d.warn ? ' delta--warn' : ''}`} title={`${fmtFull(now)} against ${fmtFull(before)} the period before`}>
-      {d.warn ? '⚠ ' : ''}
-      {up ? '▲' : '▼'} {Math.abs(Math.round(d.value * 100))}%
-    </span>
-  )
-}
-
-function Tile({ label, now, before }: { label: string; now?: number; before?: number }) {
-  return (
-    <div className="tile">
-      <span className="tile__label">{label}</span>
-      <span className="tile__value">{fmt(now)}</span>
-      <Delta now={now} before={before} />
-    </div>
-  )
-}
-
-function Row({ row }: { row: SiteRow }) {
+function Row({ row, period }: { row: SiteRow; period: string | undefined }) {
   const ui = useUi()
   const app = model.appById.get(row.app)
   const main = row.main
   const s = row.search?.search
-  const selected = ui.selection?.type === 'app' && ui.selection.id === row.app
   return (
-    <button className={`tsite${selected ? ' is-selected' : ''}`} onClick={() => ui.select(selected ? null : { type: 'app', id: row.app })} role="row">
+    <a
+      className="tsite"
+      href={`#traffic/${encodeURIComponent(row.app)}${period ? `?p=${encodeURIComponent(period)}` : ''}`}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey) return
+        e.preventDefault()
+        ui.openTraffic({ app: row.app, period })
+      }}
+      role="row"
+    >
       <span className="tsite__name" role="cell">
         {app?.name ?? row.app}
         <span>{row.providers.map((p) => PROVIDER_LABEL[p]).join(' · ') || 'no source answered'}</span>
@@ -55,14 +45,19 @@ function Row({ row }: { row: SiteRow }) {
       <span className="tsite__num tsite__wide" role="cell">
         {s ? s.totals.position.toFixed(1) : '—'}
       </span>
-    </button>
+    </a>
   )
 }
 
+/** "in the last 30 days", or "from Sep 1 to Sep 30" */
+const inPeriod = (p: AnalyticsCache) => (isRelative(p.key) ? `in the last ${p.days} days` : `from ${shortDate(p.range.from)} to ${shortDate(p.range.to)}`)
+
 export function TrafficView() {
-  const data = useAnalytics()
-  if (data === undefined) return <div className="traffic" />
-  if (!data) {
+  const ui = useUi()
+  const file = useAnalytics()
+  if (file === undefined) return <div className="traffic" />
+  const data = pickPeriod(file, ui.traffic.period)
+  if (!file || !data) {
     return (
       <div className="traffic">
         <div className="page-intro">
@@ -76,31 +71,41 @@ export function TrafficView() {
       </div>
     )
   }
+  if (ui.traffic.app) return <SiteView file={file} data={data} app={ui.traffic.app} />
+
   const rows = siteRows(data)
   const sum = (pick: (r: SiteRow) => number | undefined) => rows.reduce((n, r) => n + (pick(r) ?? 0), 0)
   const has = (pick: (r: SiteRow) => number | undefined) => rows.some((r) => pick(r) !== undefined)
   const visitors = sum((r) => r.main?.totals?.visitors)
+  const measured = rows.filter((r) => r.main)
   const searchRows = rows.filter((r) => r.search?.search)
+  const name = (app: string) => model.appById.get(app)?.name ?? app
   const queries = searchRows
-    .flatMap((r) => r.search!.search!.queries.map((q) => ({ key: q.key, value: q.clicks, note: model.appById.get(r.app)?.name ?? r.app })))
+    .flatMap((r) => r.search!.search!.queries.map((q) => ({ key: q.key, value: q.clicks, note: name(r.app) })))
     .sort((a, b) => b.value - a.value)
     .slice(0, 10)
-  const referrers = mergeTop(rows.map((r) => r.main?.top?.referrers ?? []))
-  const pages = rows.flatMap((r) => (r.main?.top?.pages ?? []).slice(0, 3).map((p) => ({ key: p.key, value: p.value, note: model.appById.get(r.app)?.name ?? r.app }))).sort((a, b) => b.value - a.value).slice(0, 8)
+  const top = (list: 'referrers' | 'countries' | 'devices', limit = 8) => mergeTop(rows.map((r) => tidy(list, r.main?.top?.[list] ?? [])), limit)
+  const pages = rows.flatMap((r) => (r.main?.top?.pages ?? []).slice(0, 3).map((p) => ({ key: p.key, value: p.value, note: name(r.app) }))).sort((a, b) => b.value - a.value).slice(0, 8)
   const failed = rows.flatMap((r) => r.failed)
   const noted = data.results.filter((r) => r.ok && r.note)
+  const value = (p: { visitors?: number; pageviews?: number }) => p.visitors ?? p.pageviews
+  const daily = addSeries(measured.map((r) => r.main!.series), value)
+  // The comparison line only when every site has one; a partial sum would look like a drop.
+  const before = measured.every((r) => r.main!.previousSeries) ? addSeries(measured.map((r) => r.main!.previousSeries), value) : undefined
   return (
     <div className="traffic">
       <div className="page-intro">
         <span className="eyebrow eyebrow--accent">Traffic</span>
         <h1>
-          {fmtFull(visitors)} visitors across {rows.filter((r) => r.main).length} sites in {data.days} days
+          {fmtFull(visitors)} visitors across {measured.length} sites {inPeriod(data)}
         </h1>
         <p>
-          {shortDate(data.range.from)} to {shortDate(data.range.to)}, against the {data.days} days before. Each site counts its main source; visitors are summed across sites, so
-          someone who visits two counts twice. Fetched {new Date(data.fetched).toLocaleString()}; <code>malha analytics refresh</code> updates it.
+          {periodLabel(data)} ({shortDate(data.range.from)} to {shortDate(data.range.to)}), against {previousLabel(data)}. Each site counts its main source; visitors are summed across
+          sites, so someone who visits two counts twice. Fetched {new Date(data.fetched).toLocaleString()}; <code>malha analytics refresh</code> updates it.
         </p>
       </div>
+
+      <PeriodPicker file={file} current={data} />
 
       <div className="tiles">
         <Tile label="Visitors" now={visitors} before={sum((r) => r.main?.previous?.visitors)} />
@@ -108,6 +113,13 @@ export function TrafficView() {
         {searchRows.length > 0 && <Tile label="Search clicks" now={sum((r) => r.search?.search?.totals.clicks)} before={sum((r) => r.search?.search?.previous?.clicks)} />}
         {searchRows.length > 0 && <Tile label="Search impressions" now={sum((r) => r.search?.search?.totals.impressions)} before={sum((r) => r.search?.search?.previous?.impressions)} />}
       </div>
+
+      {daily.length > 1 && (
+        <section className="tpanel tpanel--chart">
+          <h2 className="eyebrow">Visitors per day, all sites</h2>
+          <CompareChart now={daily} before={before} unit="visitors" labels={[periodLabel(data), previousLabel(data)]} totals={[visitors, before ? sum((r) => r.main?.previous?.visitors) : undefined]} />
+        </section>
+      )}
 
       <section className="tsites" role="table" aria-label="Traffic by site">
         <div className="tsite tsite--head" role="row">
@@ -130,7 +142,7 @@ export function TrafficView() {
           </span>
         </div>
         {rows.map((r) => (
-          <Row key={r.app} row={r} />
+          <Row key={r.app} row={r} period={ui.traffic.period} />
         ))}
       </section>
 
@@ -143,11 +155,19 @@ export function TrafficView() {
         )}
         <section className="tpanel">
           <h2 className="eyebrow">Where visitors come from</h2>
-          <BarList items={referrers} unit="visits" label="Referrers" />
+          <BarList items={top('referrers')} unit="visits" label="Referrers" />
         </section>
         <section className="tpanel">
           <h2 className="eyebrow">Busiest pages</h2>
           <BarList items={pages} unit="views" label="Pages" />
+        </section>
+        <section className="tpanel">
+          <h2 className="eyebrow">Countries</h2>
+          <BarList items={top('countries')} unit="visitors" label="Countries" />
+        </section>
+        <section className="tpanel">
+          <h2 className="eyebrow">Devices</h2>
+          <BarList items={top('devices', 5)} unit="visitors" label="Devices" />
         </section>
       </div>
 
@@ -157,7 +177,7 @@ export function TrafficView() {
           <ul className="plain">
             {[...failed, ...noted].map((f) => (
               <li key={`${f.app}:${f.provider}:${f.id}`}>
-                <b>{model.appById.get(f.app)?.name ?? f.app}</b> · {PROVIDER_LABEL[f.provider]} {f.id}: {f.ok ? f.note : f.error}
+                <b>{name(f.app)}</b> · {PROVIDER_LABEL[f.provider]} {f.id}: {f.ok ? f.note : f.error}
               </li>
             ))}
           </ul>

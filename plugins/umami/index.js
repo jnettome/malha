@@ -93,25 +93,28 @@ async function one(ctx, headersFor, source, req) {
   const headers = await headersFor(host)
   const base = `${api(host)}/websites/${encodeURIComponent(source.id)}`
   const q = (r) => `startAt=${ms(r.from)}&endAt=${ms(r.to, true)}`
-  const [now, before, views] = await Promise.all([
-    get(ctx, headers, `${base}/stats?${q(req.range)}`),
-    get(ctx, headers, `${base}/stats?${q(req.previous)}`),
-    get(ctx, headers, `${base}/pageviews?${q(req.range)}&unit=day&timezone=${encodeURIComponent(req.timezone || 'UTC')}`),
-  ])
+  const viewsOf = (r) => get(ctx, headers, `${base}/pageviews?${q(r)}&unit=day&timezone=${encodeURIComponent(req.timezone || 'UTC')}`)
+  const [now, before, views, previousViews] = await Promise.all([get(ctx, headers, `${base}/stats?${q(req.range)}`), get(ctx, headers, `${base}/stats?${q(req.previous)}`), viewsOf(req.range), viewsOf(req.previous)])
   const byDay = (list) => new Map((list ?? []).map((p) => [String(p.x).slice(0, 10), Number(p.y) || 0]))
-  const pv = byDay(views.pageviews)
-  const vis = byDay(views.sessions)
-  const [pages, referrers, countries, devices] = await Promise.all([
+  const seriesOf = (range, v) => {
+    const pv = byDay(v.pageviews)
+    const vis = byDay(v.sessions)
+    return days(range).map((date) => ({ date, visitors: vis.get(date) ?? 0, pageviews: pv.get(date) ?? 0 }))
+  }
+  const [pages, referrers, countries, devices, browsers, os] = await Promise.all([
     top(ctx, headers, base, q(req.range), ['path', 'url']),
     top(ctx, headers, base, q(req.range), ['referrer']),
     top(ctx, headers, base, q(req.range), ['country']),
     top(ctx, headers, base, q(req.range), ['device']),
+    top(ctx, headers, base, q(req.range), ['browser']),
+    top(ctx, headers, base, q(req.range), ['os']),
   ])
   return {
     totals: totals(now),
     previous: totals(before),
-    series: days(req.range).map((date) => ({ date, visitors: vis.get(date) ?? 0, pageviews: pv.get(date) ?? 0 })),
-    top: { pages, referrers, countries, devices },
+    series: seriesOf(req.range, views),
+    previousSeries: seriesOf(req.previous, previousViews),
+    top: { pages, referrers, countries, devices, browsers, os },
   }
 }
 

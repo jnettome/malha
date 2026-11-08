@@ -1,4 +1,4 @@
-import type { AnalyticsCache } from '../core/analytics.ts'
+import { normalizeAnalytics, type AnalyticsFile } from '../core/analytics.ts'
 import type { SecurityScan } from '../core/security.ts'
 import type { Topology } from '../core/types.ts'
 
@@ -37,12 +37,12 @@ export async function loadTopology() {
 }
 
 /** Traffic from `malha analytics refresh`, or null when there is none yet. */
-export async function loadAnalytics(): Promise<AnalyticsCache | null> {
+export async function loadAnalytics(): Promise<AnalyticsFile | null> {
   const el = document.getElementById('malha-analytics')
-  if (el) return embedded<AnalyticsCache>('malha-analytics') ?? null
+  if (el) return normalizeAnalytics(embedded<unknown>('malha-analytics'))
   if (!isLive()) return null
   const res = await fetch('api/analytics.json', { cache: 'no-store' })
-  return res.ok ? ((await res.json()) as AnalyticsCache | null) : null
+  return res.ok ? normalizeAnalytics(await res.json()) : null
 }
 
 /** The dependency scan, or null when there is none yet. */
