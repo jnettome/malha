@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { change, primaryResult, ranges, sourceId, type AnalyticsCache, type AnalyticsRequest, type AnalyticsSource, type Provider, type SourceResult, type TopItem } from '../core/analytics.ts'
+import { change, primaryResult, ranges, sourceId, type AnalyticsCache, type AnalyticsRequest, type AnalyticsSource, type Provider, type Trackers, type SourceResult, type TopItem } from '../core/analytics.ts'
 import { runPlugin, Session, type Asker } from '../plugins/host.ts'
 import { loadPlugins, type Resolved } from '../plugins/project.ts'
 import type { LinkResult } from '../plugins/sdk.ts'
@@ -94,6 +94,32 @@ export interface RefreshOptions {
 }
 
 /** Ask each analytics plugin for its sources' traffic and write .malha/analytics.json. */
+/** Where an app's Umami script comes from, put the way options.hosts wants it. */
+function umamiServers(t: Trackers): string {
+  const where = new Set<string>()
+  for (const u of t.umami) {
+    let url: URL
+    try {
+      url = new URL(u.script)
+    } catch {
+      continue
+    }
+    if (url.hostname === 'cloud.umami.is') where.add('Umami Cloud (https://api.umami.is)')
+    else if (t.hostnames.includes(url.hostname)) where.add('its own domain (a proxy: options.hosts is the Umami server behind it)')
+    else where.add(url.origin)
+  }
+  return [...where].join(', ') || 'a script Malha could not place'
+}
+
+/** Which PostHog cloud an app sends to, when its page says. */
+function posthogWhere(t: Trackers): string {
+  const hosts = t.posthog.map((p) => p.host ?? '')
+  if (hosts.some((h) => /\/\/(eu|eu\.i)\.posthog\.com/.test(h))) return ' (EU cloud: https://eu.posthog.com)'
+  if (hosts.some((h) => /\/\/(us|us\.i|app)\.posthog\.com/.test(h))) return ' (US cloud: https://us.posthog.com)'
+  const own = hosts.find((h) => h)
+  return own ? ` (${own})` : ''
+}
+
 export async function refreshAnalytics(file: string, opts: RefreshOptions): Promise<AnalyticsCache> {
   const { data, errors } = loadTopology(file)
   if (!data) throw new Error(`${display(file)} is invalid: ${errors[0]}`)
@@ -195,9 +221,9 @@ async function detect(file: string, opts: { yes: boolean; dryRun: boolean }) {
   }
   const covered = new Set(plugins.flatMap((p) => p.manifest.analytics!.providers))
   for (const t of trackers) {
-    if (t.umami.length && !covered.has('umami')) notes.push(`${t.app}: loads Umami; malha plugin add umami to read it`)
+    if (t.umami.length && !covered.has('umami')) notes.push(`${t.app}: loads Umami from ${umamiServers(t)}; malha plugin add umami, with that server in options.hosts, to read it`)
     if (t.ga4.length && !covered.has('ga4')) notes.push(`${t.app}: loads Google Analytics ${t.ga4.join(', ')}; malha plugin add google to read it`)
-    if (t.posthog.length && !covered.has('posthog')) notes.push(`${t.app}: loads PostHog; malha plugin add posthog to read it`)
+    if (t.posthog.length && !covered.has('posthog')) notes.push(`${t.app}: loads PostHog${posthogWhere(t)}; malha plugin add posthog to read it`)
     if (t.gtm.length && !t.ga4.length) notes.push(`${t.app}: loads Tag Manager ${t.gtm.join(', ')}; the GA4 property behind it can't be seen from the page, so add it by hand`)
   }
   if (notes.length) console.log(`\n${notes.map((n) => `  ${c.yellow('·')} ${n}`).join('\n')}`)
