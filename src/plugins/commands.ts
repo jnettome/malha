@@ -27,7 +27,8 @@ async function review(manifest: Manifest, origin: string, integrity: string, fil
     out.push('Each time it wants to, it can ask you to let it:')
     for (const r of list) {
       const warn = r.kind === 'exec' ? execWarning(r.pattern) : undefined
-      out.push(`  ${LABEL[r.kind].padEnd(6)} ${r.pattern}${warn ? `  ${c.yellow(`⚠ ${warn}`)}` : ''}`)
+      const fromOptions = /\{options\.([A-Za-z0-9_]+)\}/.exec(r.pattern)
+      out.push(`  ${LABEL[r.kind].padEnd(6)} ${r.pattern}${warn ? `  ${c.yellow(`⚠ ${warn}`)}` : ''}${fromOptions ? c.dim(`  (the host comes from options.${fromOptions[1]} in malha.plugins.json)`) : ''}`)
     }
   } else out.push('It asks for no programs, URLs, files or environment variables.')
   const also: string[] = []
@@ -86,6 +87,7 @@ export async function listPlugins(file: string) {
     console.log(`${c.green('✓')} ${c.bold(r.name)} ${r.manifest.version}  ${c.dim(r.builtin ? 'ships with Malha' : r.entry.source)}`)
     console.log(`    ${r.manifest.description}`)
     console.log(`    ${[`commands: ${Object.keys(r.manifest.commands ?? {}).join(', ') || 'none'}`, live, `you allowed ${allowed} of ${total} permission(s) always`].filter(Boolean).join(' · ')}`)
+    for (const w of r.warnings) console.log(`    ${c.yellow(w)}`)
   }
   console.log(c.dim(`\nNetwork for plugins blocked by ${iso.network}.`))
 }
@@ -106,17 +108,22 @@ export async function runCommand(file: string, name: string, command: string | u
 async function reviewChanges(file: string, plugin: Resolved, raw: unknown, opts: { yes: boolean; dryRun: boolean }) {
   if (raw === undefined || (Array.isArray(raw) && !raw.length)) return
   if (plugin.manifest.permissions.topology !== 'propose') throw new Error(`${plugin.name} returned changes, but its manifest does not declare "topology": "propose"; ignored`)
+  return proposeChanges(file, plugin.name, raw, opts)
+}
+
+/** Check changes, show them as a diff, and write them on a yes. `by` names who proposes them. */
+export async function proposeChanges(file: string, by: string, raw: unknown, opts: { yes: boolean; dryRun: boolean }) {
   const { ok, problems } = checkChanges(raw)
   const original = readFileSync(file, 'utf8')
   const date = today()
   let proposal = applyChanges(original, ok, date)
   problems.push(...proposal.problems)
   if (problems.length) say(['', c.yellow(`Skipped ${problems.length} change(s):`), ...problems.map((p) => `  ${p}`)])
-  if (!proposal.applied.length) return console.log(`\n  ${plugin.name} proposes no changes to ${display(file)}; it is up to date.`)
+  if (!proposal.applied.length) return console.log(`\n  ${by} proposes no changes to ${display(file)}; it is up to date.`)
 
   for (;;) {
     const lines = diffLines(original, proposal.text)
-    say(['', `${c.bold(plugin.name)} proposes ${proposal.applied.length} change(s) to ${display(file)}:`, ...proposal.applied.map((a, i) => `  ${c.cyan(`${i + 1}.`)} ${a.summary}`), ''])
+    say(['', `${c.bold(by)} proposes ${proposal.applied.length} change(s) to ${display(file)}:`, ...proposal.applied.map((a, i) => `  ${c.cyan(`${i + 1}.`)} ${a.summary}`), ''])
     printDiff(lines)
     const check = checkTopology(proposal.text)
     if (check.errors.length) {
@@ -131,7 +138,7 @@ async function reviewChanges(file: string, plugin: Resolved, raw: unknown, opts:
       pick = await choose([`Write these changes to ${display(file)}?`], ['Yes', 'No', 'Choose which'])
     }
     if (pick === 1) {
-      audit(file, { plugin: plugin.name, kind: 'write', detail: proposal.applied.map((a) => a.summary).join('; '), decision: 'declined' })
+      audit(file, { plugin: by, kind: 'write', detail: proposal.applied.map((a) => a.summary).join('; '), decision: 'declined' })
       return console.log('  Nothing written.')
     }
     if (pick === 2) {
@@ -147,14 +154,14 @@ async function reviewChanges(file: string, plugin: Resolved, raw: unknown, opts:
     }
     if (readFileSync(file, 'utf8') !== original) throw new Error(`${display(file)} changed while you were reviewing; nothing written. Run the command again.`)
     writeFileSync(file, proposal.text)
-    audit(file, { plugin: plugin.name, kind: 'write', detail: proposal.applied.map((a) => a.summary).join('; '), decision: 'wrote' })
+    audit(file, { plugin: by, kind: 'write', detail: proposal.applied.map((a) => a.summary).join('; '), decision: 'wrote' })
     return console.log(`\n  Wrote ${proposal.applied.length} change(s) to ${display(file)}. Review with git diff, then commit.`)
   }
 }
 
 export async function allowPlugin(file: string, name: string, opts: { yes: boolean }) {
   const plugin = loadPlugin(file, name)
-  say(['', ...(await review(plugin.manifest, plugin.builtin ? 'ships with Malha' : plugin.entry.source, plugin.integrity, plugin.files))])
+  say(['', ...(await review(plugin.manifest, plugin.builtin ? 'ships with Malha' : plugin.entry.source, plugin.integrity, plugin.files)), ...plugin.warnings.map((w) => c.yellow(w))])
   const keys = rules(plugin.manifest).map(ruleKey)
   if (!keys.length) return console.log(`\n  ${name} asks for nothing that needs approval.`)
   if (!opts.yes) {

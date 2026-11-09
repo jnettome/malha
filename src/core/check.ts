@@ -1,3 +1,4 @@
+import { mainResult, type AnalyticsCache } from './analytics.ts'
 import type { LiveNode } from './live.ts'
 import type { SecurityScan, Severity } from './security.ts'
 import type { Topology } from './types.ts'
@@ -17,6 +18,9 @@ export const CHECKS = [
   'single-node-database',
   'vulnerability',
   'scan-stale',
+  'traffic-drop',
+  'analytics-error',
+  'analytics-stale',
 ] as const
 export type CheckName = (typeof CHECKS)[number]
 
@@ -41,6 +45,7 @@ export const AREAS: { name: string; checks: CheckName[] }[] = [
   { name: 'Nodes', checks: ['node-degraded', 'pod-pressure'] },
   { name: 'Databases', checks: ['single-node-database'] },
   { name: 'Dependencies', checks: ['scan-stale', 'vulnerability'] },
+  { name: 'Traffic', checks: ['analytics-stale', 'analytics-error', 'traffic-drop'] },
 ]
 
 export const areaOf = (f: CheckFinding) => AREAS.find((a) => a.checks.includes(f.check))!.name
@@ -61,10 +66,17 @@ export interface CheckOptions {
   live?: Record<string, LiveNode>
   /** Vulnerability severities to report. */
   severities?: Severity[]
+  /** The last `malha analytics refresh`. */
+  analytics?: AnalyticsCache | null
 }
 
 export const PRESSURE = { warning: 0.8, critical: 0.95 }
 export const SCAN_STALE_DAYS = 14
+/** A drop this big against the previous period is a warning, and the second a critical finding. */
+export const TRAFFIC_DROP = { warning: 0.5, critical: 0.8 }
+/** Fewer visitors (or clicks) than this in the previous period is too little to judge a drop. */
+export const TRAFFIC_BASELINE = 50
+export const ANALYTICS_STALE_DAYS = 3
 
 const finding = (check: CheckName, subject: string, f: Omit<CheckFinding, 'id' | 'check' | 'subject'>): CheckFinding => ({ id: `${check}:${subject}`, check, subject, ...f })
 
@@ -162,12 +174,42 @@ function vulnerabilities(scan: SecurityScan | null | undefined, today: Date, sev
   return out
 }
 
+function traffic(cache: AnalyticsCache | null | undefined, t: Topology, today: Date) {
+  const out: CheckFinding[] = []
+  if (!cache) return out
+  const name = new Map((t.apps ?? []).map((a) => [a.id, a.name]))
+  const age = -daysUntil(cache.fetched.slice(0, 10), today)
+  if (age > ANALYTICS_STALE_DAYS) out.push(finding('analytics-stale', 'analytics', { severity: 'warning', level: String(age > 14 ? 14 : ANALYTICS_STALE_DAYS), title: `Traffic was last fetched ${age} days ago`, detail: 'run malha analytics refresh, or schedule it' }))
+  for (const r of cache.results) if (!r.ok) out.push(finding('analytics-error', `${r.app}/${r.provider}`, { severity: 'warning', level: 'error', title: `${name.get(r.app) ?? r.app}: ${r.provider} ${r.id} could not be read`, detail: r.error }))
+  const drop = (now: number | undefined, before: number | undefined) => (now !== undefined && before !== undefined && before >= TRAFFIC_BASELINE ? 1 - now / before : undefined)
+  for (const app of new Set(cache.results.map((r) => r.app))) {
+    const mine = cache.results.filter((r) => r.app === app)
+    const main = mainResult(mine)
+    const label = name.get(app) ?? app
+    if (main) {
+      const series = main.series ?? []
+      const lastTwo = series.slice(-2)
+      const silent = lastTwo.length === 2 && lastTwo.every((p) => (p.visitors ?? p.pageviews ?? 0) === 0) && (main.previous?.visitors ?? 0) >= TRAFFIC_BASELINE
+      const d = drop(main.totals?.visitors, main.previous?.visitors)
+      if (silent)
+        out.push(finding('traffic-drop', app, { severity: 'critical', level: 'silent', title: `${label} has had no visitors since ${lastTwo[0].date}`, detail: `${main.provider}: the tracker may be gone, or the site down` }))
+      else if (d !== undefined && d >= TRAFFIC_DROP.warning)
+        out.push(finding('traffic-drop', app, { severity: d >= TRAFFIC_DROP.critical ? 'critical' : 'warning', level: d >= TRAFFIC_DROP.critical ? '80' : '50', title: `${label}: visitors down ${Math.round(d * 100)}%`, detail: `${main.totals?.visitors} in ${cache.days} days, against ${main.previous?.visitors} before (${main.provider})` }))
+    }
+    const sc = mine.find((r) => r.provider === 'search-console' && r.ok && r.search)
+    const sd = sc ? drop(sc.search!.totals.clicks, sc.search!.previous?.clicks) : undefined
+    if (sd !== undefined && sd >= TRAFFIC_DROP.warning)
+      out.push(finding('traffic-drop', `${app}/search`, { severity: 'warning', level: sd >= TRAFFIC_DROP.critical ? '80' : '50', title: `${label}: search clicks down ${Math.round(sd * 100)}%`, detail: `${sc!.search!.totals.clicks} in ${cache.days} days, against ${sc!.search!.previous?.clicks} before (Search Console)` }))
+  }
+  return out
+}
+
 const ORDER = { critical: 0, warning: 1 }
 
 /** Every finding, most urgent first. */
 export function runChecks(t: Topology, opts: CheckOptions = {}): CheckFinding[] {
   const today = opts.today ?? new Date()
-  return [...domains(t, today), ...nodes(t, opts.live), ...databases(t), ...vulnerabilities(opts.scan, today, opts.severities ?? ['critical'])].sort(
+  return [...domains(t, today), ...nodes(t, opts.live), ...databases(t), ...vulnerabilities(opts.scan, today, opts.severities ?? ['critical']), ...traffic(opts.analytics, t, today)].sort(
     (a, b) =>
       ORDER[a.severity] - ORDER[b.severity] || CHECKS.indexOf(a.check) - CHECKS.indexOf(b.check) || (b.count ?? 0) - (a.count ?? 0) || a.subject.localeCompare(b.subject),
   )

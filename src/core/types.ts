@@ -1,5 +1,6 @@
 // Mirrors infra/topology.schema.json. Keep the two in step.
 
+import type { AnalyticsSource } from './analytics.ts'
 import type { Accepted } from './check.ts'
 
 export type LinkKind =
@@ -132,6 +133,8 @@ export interface App {
   repos?: string[]
   uses?: string[]
   depends_on?: string[]
+  /** Where its traffic is measured; `malha analytics detect` proposes these. */
+  analytics?: AnalyticsSource[]
   notes?: Notes
 }
 

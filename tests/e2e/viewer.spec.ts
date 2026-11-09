@@ -1,5 +1,5 @@
 import { execFileSync, type ChildProcess } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import { CLI, collectErrors, copyExample, devServer, EXAMPLE, overflowing, staticServer } from './helpers.ts'
@@ -10,6 +10,7 @@ const TABS = [
   { name: 'Fleet', ready: '.rack' },
   { name: 'Products', ready: '.matrix tbody tr' },
   { name: 'Domains', ready: '.dom__row:not(.dom__row--head)' },
+  { name: 'Traffic', ready: '.traffic h1' },
   { name: 'Security', ready: '.security h1' },
 ]
 
@@ -127,5 +128,94 @@ test('a live plugin asks in the page, and its numbers replace the samples', asyn
     expect(errors).toEqual([])
   } finally {
     server.kill()
+  }
+})
+
+test('the Traffic tab shows every site, its trend, and what could not be read', async ({ page, isMobile }) => {
+  const { dir, file } = copyExample()
+  mkdirSync(join(dir, '.malha'))
+  copyFileSync('tests/fixtures/analytics.json', join(dir, '.malha', 'analytics.json'))
+  const port = isMobile ? 5417 : 5416
+  const server = await devServer(file, port)
+  try {
+    const errors = collectErrors(page)
+    await page.goto(`http://127.0.0.1:${port}/#traffic`)
+    await expect(page.locator('.traffic h1')).toHaveText(/visitors across 3 sites in the last 30 days/)
+    await expect(page.locator('.tsite:not(.tsite--head)')).toHaveCount(4)
+    await expect(page.locator('.tsite:not(.tsite--head)').first()).toContainText('Shop')
+    // The drop the checks flag is flagged here too.
+    await expect(page.locator('.tsite', { hasText: 'Status page' }).locator('.delta--warn')).toBeVisible()
+    await expect(page.locator('.tpanel--notice')).toContainText('no login for https://umami.acme.example')
+    if (!isMobile) {
+      const spark = await page.locator('.spark').first().boundingBox()
+      await page.mouse.move(spark!.x + spark!.width / 2, spark!.y + spark!.height / 2)
+      await expect(page.locator('.chart__tip').first()).toHaveText(/Oct \d+ · [\d,]+ visitors/)
+    }
+    expect(await overflowing(page)).toEqual([])
+
+    // Another period: kept in the address.
+    await page.getByRole('button', { name: '90 days' }).click()
+    await expect(page.locator('.traffic h1')).toHaveText(/in the last 90 days/)
+    await expect(page).toHaveURL(/#traffic\?p=90d$/)
+
+    // A site's own page, in the same period, with links to each source's dashboard.
+    await page.locator('.tsite', { hasText: 'Shop' }).click()
+    await expect(page.locator('.traffic h1')).toHaveText('Shop')
+    await expect(page).toHaveURL(/#traffic\/shop\?p=90d$/)
+    await expect(page.locator('.tile', { hasText: 'Bounce rate' })).toContainText('41%')
+    await expect(page.locator('.chart__legend').first()).toContainText('Last 90 days')
+    await expect(page.locator('.tlinks .tlink').first()).toHaveAttribute('href', 'https://analytics.google.com/analytics/web/#/p312345678/reports/intelligenthome')
+    await expect(page.locator('.tpanel', { hasText: 'Browsers' })).toContainText('Chrome')
+    await expect(page.locator('table.matrix').first()).toContainText('acme kettle')
+    await page.getByRole('button', { name: 'pageviews' }).click()
+    await expect(page.locator('.tpanel--chart h2').first()).toHaveText('Pageviews per day')
+    expect(await overflowing(page)).toEqual([])
+
+    // Dates from the calendar, or dragged across the chart; the plugin-less copy can't fetch them.
+    await page.getByRole('button', { name: 'Pick dates' }).click()
+    await page.getByRole('button', { name: 'Last month' }).click()
+    await expect(page.locator('.period__summary')).toHaveText(/ – .* · \d+ days, against the \d+ before/)
+    await expect(page.locator('.cal__day.is-edge')).toHaveCount(2)
+    expect(await overflowing(page)).toEqual([])
+    await page.locator('.period__foot .btn').click()
+    await expect(page.locator('.period__summary')).toHaveText(/no analytics plugin/)
+    await page.getByRole('button', { name: 'Pick dates' }).click()
+    if (!isMobile) {
+      const plot = (await page.locator('.chart--compare .chart__plot').first().boundingBox())!
+      await page.mouse.move(plot.x + plot.width * 0.2, plot.y + plot.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(plot.x + plot.width * 0.5, plot.y + plot.height / 2, { steps: 4 })
+      await expect(page.locator('.chart__band')).toBeVisible()
+      await page.mouse.up()
+      await expect(page.locator('.period__summary')).toHaveText(/^\w{3} \d+ – \w{3} \d+, 20\d\d · \d+ days/)
+    }
+
+    // Back to every site, and the app panel links to the page too.
+    await page.goBack()
+    await expect(page.locator('.traffic h1')).toHaveText(/in the last 90 days/)
+    await page.locator('.tsite', { hasText: 'Status page' }).click()
+    await page.getByRole('button', { name: 'Show its machines' }).click()
+    await expect(page.locator('.insp__section', { hasText: 'Traffic · last 90 days' })).toContainText('Umami')
+    await expect(page.locator('.insp__section a.tlink')).toHaveAttribute('href', 'https://umami.acme.example/websites/7b8f1c2e-5a44-4d1e-9c3a-2f6e8d0b1a55')
+    // The one expected failure: the fetch refused above, which the browser logs.
+    expect(errors.filter((e) => !e.includes('status of 409'))).toEqual([])
+  } finally {
+    server.kill()
+  }
+})
+
+test('a static build carries the traffic', async ({ page, isMobile }) => {
+  test.skip(isMobile, 'desktop covers it')
+  const { dir, file } = copyExample()
+  mkdirSync(join(dir, '.malha'))
+  copyFileSync('tests/fixtures/analytics.json', join(dir, '.malha', 'analytics.json'))
+  const out = join(dir, 'site')
+  execFileSync(process.execPath, [CLI, 'build', file, '--out', out])
+  const http = await staticServer(out, 5418)
+  try {
+    await page.goto('http://127.0.0.1:5418/#traffic')
+    await expect(page.locator('.tsite:not(.tsite--head)')).toHaveCount(4)
+  } finally {
+    http.close()
   }
 })

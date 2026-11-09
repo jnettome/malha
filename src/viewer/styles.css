@@ -2862,6 +2862,660 @@ input:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* ── Traffic ─────────────────────────────────────────────────────────── */
+
+/* One series per chart, in the chart hue (accent-2 passes contrast on these surfaces); text stays in text tokens. */
+:root {
+  --chart-line: var(--accent-2);
+  --chart-fill: rgb(43 154 104 / 0.14);
+}
+
+.traffic {
+  height: 100%;
+  padding: 32px 32px 64px;
+  overflow-y: auto;
+}
+
+.traffic .tile .delta {
+  font-size: 12px;
+}
+
+.delta {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.delta--warn {
+  color: var(--notice);
+}
+
+.tsites {
+  margin-bottom: 24px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 3px;
+  background: var(--bg-1);
+}
+
+.tsite {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.4fr) 128px repeat(5, minmax(64px, 0.6fr));
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 16px;
+  border: none;
+  border-bottom: 1px solid var(--stroke-1);
+  background: none;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tsite:last-child {
+  border-bottom: none;
+}
+
+.tsite:hover,
+.tsite.is-selected {
+  background: var(--bg-2);
+}
+
+.tsite--head {
+  cursor: default;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.tsite--head:hover {
+  background: none;
+}
+
+.tsite--head .tsite__num {
+  font-size: inherit;
+}
+
+.tsite__name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.tsite__name span {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tsite__num {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.traffic__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.tpanel {
+  padding: 14px 16px 12px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 3px;
+  background: var(--bg-1);
+}
+
+.tpanel h2 {
+  margin-bottom: 10px;
+}
+
+.tpanel--notice {
+  border-color: var(--notice-line);
+}
+
+.tpanel--notice li {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+/* Charts */
+.spark,
+.chart__plot {
+  position: relative;
+  display: inline-block;
+}
+
+.spark svg {
+  display: block;
+}
+
+.chart {
+  margin: 10px 0 12px;
+}
+
+.chart__plot {
+  display: block;
+  width: 100%;
+}
+
+.chart__plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.chart__line {
+  fill: none;
+  stroke: var(--chart-line);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart__area {
+  fill: var(--chart-fill);
+}
+
+.chart__grid {
+  stroke: var(--stroke-1);
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart__base {
+  stroke: var(--stroke-2);
+  vector-effect: non-scaling-stroke;
+}
+
+.chart__cross {
+  stroke: var(--stroke-3);
+  vector-effect: non-scaling-stroke;
+}
+
+.chart__dot {
+  fill: var(--accent);
+  stroke: var(--bg-1);
+  stroke-width: 2;
+}
+
+.chart__dot-html {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border: 2px solid var(--bg-1);
+  border-radius: 50%;
+  background: var(--accent);
+  box-sizing: content-box;
+  pointer-events: none;
+}
+
+.chart__max {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.chart__axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.chart__tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  padding: 3px 7px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 3px;
+  background: var(--bg-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-1);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* Ranked bars: anchored left, a rounded data end, a 2px gap between rows, the value as text. */
+.tbars {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tbars__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(60px, 1fr) 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  margin-bottom: 2px;
+}
+
+.tbars__label {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tbars__label em {
+  margin-left: 6px;
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+
+.tbars__track {
+  height: 8px;
+}
+
+.tbars__fill {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  background: var(--chart-line);
+}
+
+.tbars__value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tbars__empty {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+/* Rows are links to each site's page. */
+a.tsite {
+  text-decoration: none;
+}
+
+/* Period picker: presets, ranges fetched before, and a custom range in malha dev. */
+.period {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.period__saved,
+.period__custom input {
+  padding: 6px 8px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 3px;
+  background: var(--bg-1);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color-scheme: dark;
+}
+
+.period__custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.period__custom label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.period__hint {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.period__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.period__panel {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 640px;
+  padding: 14px 16px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 3px;
+  background: var(--bg-1);
+}
+
+.period__shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.period__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.period__summary {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+/* Range calendar: two months, the range filled in, its first and last day in the accent. */
+.cal {
+  --cal-range: rgb(72 213 151 / 0.16);
+  position: relative;
+}
+
+.cal__nav {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  display: flex;
+  gap: 4px;
+}
+
+.cal__step {
+  width: 26px;
+  height: 24px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 3px;
+  background: var(--bg-1);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.cal__step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cal__months {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.cal__title {
+  height: 24px;
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  line-height: 24px;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px 0;
+}
+
+.cal__weekday {
+  padding: 4px 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: center;
+  color: var(--text-3);
+}
+
+.cal__day {
+  height: 32px;
+  border: none;
+  background: none;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cal__day:hover:not(:disabled) {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.cal__day:disabled {
+  color: var(--text-3);
+  opacity: 0.4;
+  cursor: default;
+}
+
+.cal__day.is-inside {
+  background: var(--cal-range);
+}
+
+.cal__day.is-edge {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.chart__hint {
+  margin-left: auto;
+  color: var(--text-3);
+}
+
+.chart__plot--brush {
+  cursor: crosshair;
+  user-select: none;
+}
+
+.chart__band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-bg);
+  border-left: 1px solid var(--accent);
+  border-right: 1px solid var(--accent);
+  pointer-events: none;
+}
+
+/* A site's page. */
+.tback {
+  display: inline-block;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  text-decoration: none;
+}
+
+.tback:hover {
+  color: var(--text-1);
+}
+
+.tlinks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.tlinks__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.tlink {
+  padding: 4px 8px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-1);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.tlink:hover {
+  border-color: var(--accent);
+}
+
+.tsection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin: 32px 0 12px;
+}
+
+.tsection h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.tpanel--chart {
+  margin-bottom: 24px;
+}
+
+.tpanel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tpanel__lede {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.traffic__grid--wide {
+  grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+}
+
+.matrix--static tbody tr {
+  cursor: default;
+}
+
+.matrix .num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ttable__key {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* This period against the previous: a solid line in the chart hue, a dashed neutral one. */
+.chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.chart__key {
+  display: inline-block;
+  width: 16px;
+  margin-right: 4px;
+  vertical-align: middle;
+  border-top: 2px solid var(--chart-line);
+}
+
+.chart__key--before {
+  border-top: 2px dashed var(--text-3);
+}
+
+.chart__line--before {
+  stroke: var(--text-3);
+  stroke-dasharray: 5 4;
+}
+
+.chart__tip--two {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chart__tip-before {
+  color: var(--text-3);
+}
+
+@media (max-width: 900px) {
+  .traffic {
+    padding: 20px 16px 48px;
+  }
+  .tsite {
+    grid-template-columns: minmax(0, 1fr) 88px 52px 60px;
+    gap: 8px;
+    padding: 9px 12px;
+  }
+  .tsite__wide {
+    display: none;
+  }
+  .spark svg {
+    width: 88px;
+  }
+  .ttable__wide {
+    display: none;
+  }
+  .ttable__key {
+    max-width: 150px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

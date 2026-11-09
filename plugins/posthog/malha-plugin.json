@@ -1,0 +1,16 @@
+{
+  "$schema": "../../schema/plugin.schema.json",
+  "name": "posthog",
+  "version": "0.1.0",
+  "description": "Reads visitors, pageviews, top pages, referrers, countries and devices from PostHog: PostHog Cloud (US or EU), or your own instance.",
+  "main": "index.js",
+  "permissions": {
+    "fetch": ["GET,POST {options.hosts}/api/*"],
+    "env": ["POSTHOG_PERSONAL_API_KEY"],
+    "files": ["~/.config/malha/posthog-key"]
+  },
+  "analytics": {
+    "providers": ["posthog"],
+    "description": "Pageviews per project, filtered to each app's hostnames; detect matches the project keys on your pages"
+  }
+}

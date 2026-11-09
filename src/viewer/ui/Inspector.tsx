@@ -8,6 +8,9 @@ import { SeverityChip } from '../security/SecurityView.tsx'
 import { SEVERITIES } from '../../core/security.ts'
 import { KINDS, NODE_KIND_LABEL, STATUS_LABEL } from './kinds.ts'
 import { FrontPanel, KindSwatch, Led, Meter, PodGrid } from './parts.tsx'
+import { BarList, SeriesChart } from '../traffic/charts.tsx'
+import { panelUrl, pickPeriod, sourceId } from '../../core/analytics.ts'
+import { fmtFull, periodLabel, PROVIDER_LABEL, siteRows, useAnalytics } from '../traffic/data.ts'
 import { useUi } from './state.tsx'
 import { useLiveNode } from '../live.ts'
 
@@ -286,10 +289,73 @@ function AppDetail({ app }: { app: App }) {
         </Section>
       )}
 
+      {app.analytics?.length ? <AppTraffic app={app} /> : null}
+
       {app.repos?.length ? <AppSecurity app={app} /> : null}
 
       <Notes notes={notesOf(app.notes)} />
     </>
+  )
+}
+
+function AppTraffic({ app }: { app: App }) {
+  const ui = useUi()
+  const data = pickPeriod(useAnalytics(), ui.traffic.period)
+  if (!data) return null
+  const mine = data.results.filter((r) => r.app === app.id)
+  const row = siteRows({ ...data, results: mine })[0]
+  if (!row) return null
+  const main = row.main
+  const others = mine.filter((r) => r.ok && r.totals && r.provider !== 'search-console' && r.provider !== main?.provider)
+  const s = row.search?.search
+  return (
+    <Section title={`Traffic · ${periodLabel(data).toLowerCase()}`}>
+      {main?.totals && (
+        <>
+          <Spec
+            rows={[
+              ['Visitors', `${fmtFull(main.totals.visitors)}${main.previous?.visitors ? ` (${fmtFull(main.previous.visitors)} before)` : ''}`],
+              ['Pageviews', main.totals.pageviews !== undefined ? fmtFull(main.totals.pageviews) : undefined],
+              ['Source', main.parts ? `${PROVIDER_LABEL[main.provider]}, ${main.parts.length} sources added up` : `${PROVIDER_LABEL[main.provider]} ${main.id}`],
+              // Other providers count the same visits, so they are not added in; shown to compare.
+              ...[...new Set(others.map((r) => r.provider))].map((p): [string, string] => [
+                'Also',
+                `${PROVIDER_LABEL[p]}: ${fmtFull(others.filter((r) => r.provider === p).reduce((n, r) => n + (r.totals?.visitors ?? 0), 0))} visitors`,
+              ]),
+            ]}
+          />
+          {main.parts ? <BarList items={main.parts.map((p) => ({ key: p.allHosts?.[0]?.key ?? p.id, note: `${PROVIDER_LABEL[p.provider]} ${p.id}`, value: p.totals?.visitors ?? 0 }))} unit="visitors" label="Sites" /> : null}
+          {main.series?.length ? <SeriesChart points={main.series.map((p) => ({ date: p.date, value: p.visitors ?? p.pageviews ?? 0 }))} unit="visitors" height={96} /> : null}
+          {main.top?.pages?.length ? <BarList items={main.top.pages.slice(0, 5)} unit="views" label="Pages" /> : null}
+        </>
+      )}
+      {s && (
+        <>
+          <Spec rows={[['Search', `${fmtFull(s.totals.clicks)} clicks, ${fmtFull(s.totals.impressions)} impressions, position ${s.totals.position.toFixed(1)}`]]} />
+          <BarList items={s.queries.slice(0, 5).map((q) => ({ key: q.key, value: q.clicks }))} unit="clicks" label="Search queries" />
+        </>
+      )}
+      {[...row.failed, ...mine.filter((r) => r.ok && r.note)].map((f) => (
+        <p key={`${f.provider}:${f.id}`} className="callout callout--notice">
+          {PROVIDER_LABEL[f.provider]} {f.id}: {f.ok ? f.note : f.error}
+        </p>
+      ))}
+      <div className="tlinks">
+        {mine
+          .filter((r, i) => mine.findIndex((x) => sourceId(x) === sourceId(r)) === i)
+          .map((r) => {
+            const url = panelUrl(r, data.range)
+            return url ? (
+              <a key={sourceId(r)} className="tlink" href={url} target="_blank" rel="noopener noreferrer">
+                {PROVIDER_LABEL[r.provider]} ↗
+              </a>
+            ) : null
+          })}
+      </div>
+      <button className="btn" onClick={() => ui.openTraffic({ app: app.id, period: ui.traffic.period })}>
+        All its traffic
+      </button>
+    </Section>
   )
 }
 

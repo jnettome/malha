@@ -3,12 +3,12 @@
 // process as untrusted: it checks each request itself, whatever this file does.
 import './lockdown.ts'
 import { pathToFileURL } from 'node:url'
-import type { CheckReport, CommandResult, FetchInit, LiveData, NotifyResult, Plugin, PluginContext, Topology } from './sdk.ts'
+import type { AnalyticsRequest, CheckReport, CommandResult, FetchInit, LinkRequest, LiveData, NotifyResult, Plugin, PluginContext, Topology } from './sdk.ts'
 
 interface Start {
   t: 'start'
   entry: string
-  run: { kind: 'command'; name: string } | { kind: 'live' } | { kind: 'notify' }
+  run: { kind: 'command'; name: string } | { kind: 'live' } | { kind: 'notify' } | { kind: 'analytics' } | { kind: 'link' }
   input?: unknown
   options: Record<string, unknown>
   args: string[]
@@ -62,6 +62,14 @@ async function run(start: Start) {
   }
   const mod = (await import(pathToFileURL(start.entry).href)) as { default?: Plugin } & Plugin
   const plugin = mod.default ?? mod
+  if (start.run.kind === 'analytics') {
+    if (typeof plugin.analytics !== 'function') throw new Error('this plugin declares analytics but exports no analytics() function')
+    return await plugin.analytics(ctx, start.input as AnalyticsRequest)
+  }
+  if (start.run.kind === 'link') {
+    if (typeof plugin.link !== 'function') return { sources: [], notes: ['this plugin cannot match trackers to sources'] }
+    return await plugin.link(ctx, start.input as LinkRequest)
+  }
   if (start.run.kind === 'notify') {
     if (typeof plugin.notify !== 'function') throw new Error('this plugin declares notify but exports no notify() function')
     return (await plugin.notify(ctx, start.input as CheckReport)) satisfies NotifyResult

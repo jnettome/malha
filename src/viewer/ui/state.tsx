@@ -3,7 +3,7 @@ import { flows } from '../model/model.ts'
 import type { LinkKind } from '../../core/types.ts'
 import { HIDDEN_BY_DEFAULT } from './kinds.ts'
 
-export type View = 'topology' | 'map' | 'fleet' | 'products' | 'domains' | 'security'
+export type View = 'topology' | 'map' | 'fleet' | 'products' | 'domains' | 'traffic' | 'security'
 export type Selection = { type: 'node' | 'app'; id: string }
 export interface FlowState {
   id: string
@@ -14,17 +14,50 @@ export interface FlowState {
 export const STEP_MS = 2800
 export const LAST_STEP_HOLD = 1.6
 
-const VIEWS: View[] = ['topology', 'map', 'fleet', 'products', 'domains', 'security']
-const viewFromHash = (): View => {
-  const v = location.hash.slice(1) as View
-  return VIEWS.includes(v) ? v : 'topology'
+/** Where the Traffic tab is: one site's page (or the overview), and which period. */
+export interface TrafficRoute {
+  app?: string
+  period?: string
 }
 
+const VIEWS: View[] = ['topology', 'map', 'fleet', 'products', 'domains', 'traffic', 'security']
+/** #view, or #traffic/<app>?p=<period> */
+const fromHash = (): { view: View; traffic: TrafficRoute } => {
+  const [path, query = ''] = location.hash.slice(1).split('?')
+  const [v, app] = path.split('/')
+  const view = VIEWS.includes(v as View) ? (v as View) : 'topology'
+  const period = new URLSearchParams(query).get('p') ?? undefined
+  return { view, traffic: view === 'traffic' ? { app: app ? decodeURIComponent(app) : undefined, period } : {} }
+}
+const hashFor = (view: View, t: TrafficRoute = {}) =>
+  view !== 'traffic' ? `#${view}` : `#traffic${t.app ? `/${encodeURIComponent(t.app)}` : ''}${t.period ? `?p=${encodeURIComponent(t.period)}` : ''}`
+
 function useUiState() {
-  const [view, setViewState] = useState<View>(viewFromHash)
+  const [view, setViewState] = useState<View>(() => fromHash().view)
+  const [traffic, setTrafficState] = useState<TrafficRoute>(() => fromHash().traffic)
   const setView = useCallback((v: View) => {
     setViewState(v)
-    history.replaceState(null, '', `#${v}`)
+    // The Traffic tab opens on its overview, in the period last picked.
+    setTrafficState((t) => {
+      const next = { period: t.period }
+      history.replaceState(null, '', hashFor(v, next))
+      return next
+    })
+  }, [])
+  /** Go to a site's traffic page or the overview (a new history entry), or change the period (none). */
+  const openTraffic = useCallback((route: TrafficRoute, push = true) => {
+    setViewState('traffic')
+    setTrafficState(route)
+    history[push ? 'pushState' : 'replaceState'](null, '', hashFor('traffic', route))
+  }, [])
+  useEffect(() => {
+    const onPop = () => {
+      const h = fromHash()
+      setViewState(h.view)
+      setTrafficState(h.traffic)
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
   }, [])
   const [selection, setSelection] = useState<Selection | null>(null)
   const [flow, setFlow] = useState<FlowState | null>(null)
@@ -69,6 +102,8 @@ function useUiState() {
     () => ({
       view,
       setView,
+      traffic,
+      openTraffic,
       selection,
       select,
       flow,
@@ -83,7 +118,7 @@ function useUiState() {
       focusRequest,
       requestFocus,
     }),
-    [view, setView, selection, select, flow, playFlow, stopFlow, setStep, togglePlay, hidden, toggleKind, showRetired, focusRequest, requestFocus],
+    [view, setView, traffic, openTraffic, selection, select, flow, playFlow, stopFlow, setStep, togglePlay, hidden, toggleKind, showRetired, focusRequest, requestFocus],
   )
 }
 

@@ -11,6 +11,7 @@ const VIEWS: { id: View; label: string }[] = [
   { id: 'fleet', label: 'Fleet' },
   { id: 'products', label: 'Products' },
   { id: 'domains', label: 'Domains' },
+  { id: 'traffic', label: 'Traffic' },
   { id: 'security', label: 'Security' },
 ]
 

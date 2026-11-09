@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { Ajv } from 'ajv'
 import { scriptJson } from '../src/cli/build.ts'
 import { loadTopology } from '../src/cli/load.ts'
 import { compareVersions, findingsFrom, normalizeRemote } from '../src/cli/scan.ts'
@@ -68,5 +69,15 @@ describe('build', () => {
     const tag = scriptJson('x', JSON.stringify({ note: '</script><script>alert(1)</script>' }))
     expect(tag).not.toContain('</script><script>')
     expect(JSON.parse(tag.slice(tag.indexOf('>') + 1, tag.lastIndexOf('</script>')))).toEqual({ note: '</script><script>alert(1)</script>' })
+  })
+})
+
+describe('the schemas', () => {
+  it('compile without warnings, so no command prints one', () => {
+    for (const file of ['schema/topology.schema.json', 'schema/plugin.schema.json']) {
+      const warnings: unknown[] = []
+      new Ajv({ allErrors: true, logger: { log: () => undefined, warn: (...m: unknown[]) => warnings.push(m), error: (...m: unknown[]) => warnings.push(m) } }).compile(JSON.parse(readFileSync(file, 'utf8')))
+      expect(warnings, file).toEqual([])
+    }
   })
 })

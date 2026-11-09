@@ -10,7 +10,7 @@ export const MANIFEST = 'malha-plugin.json'
 const SCHEMA = fileURLToPath(new URL('../../schema/plugin.schema.json', import.meta.url))
 
 /** Names that are Malha's own commands, so a plugin cannot take them over. */
-export const RESERVED = new Set(['init', 'dev', 'validate', 'build', 'scan', 'check', 'domains', 'schema', 'plugin', 'plugins', 'help', 'version'])
+export const RESERVED = new Set(['init', 'dev', 'validate', 'build', 'scan', 'check', 'analytics', 'domains', 'schema', 'plugin', 'plugins', 'help', 'version'])
 
 const LIMITS = { files: 2000, bytes: 50 * 1024 * 1024 }
 

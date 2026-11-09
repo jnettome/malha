@@ -8,7 +8,6 @@ import { findRule, matchEnv, matchExec, matchFetch, matchFile, resolveFile, rule
 import { requireIsolation, sandboxArgv, type Isolation } from './sandbox.ts'
 import { allowAlways, allowedRules, audit } from './state.ts'
 import type { Answer, Question } from '../core/live.ts'
-import type { CommandResult, LiveData, NotifyResult } from './sdk.ts'
 
 export type { Answer, Question }
 
@@ -31,8 +30,8 @@ export class Session {
 export interface RunOptions {
   file: string
   plugin: Resolved
-  run: { kind: 'command'; name: string } | { kind: 'live' } | { kind: 'notify' }
-  /** Data for the plugin's entry point: the report, for notify. */
+  run: { kind: 'command'; name: string } | { kind: 'live' } | { kind: 'notify' } | { kind: 'analytics' } | { kind: 'link' }
+  /** Data for the plugin's entry point: the report for notify, the request for analytics and link. */
   input?: unknown
   args?: string[]
   asker: Asker
@@ -105,7 +104,7 @@ async function readCapped(res: Response, cap: number) {
   return Buffer.concat(chunks).toString('utf8')
 }
 
-export async function runPlugin(opts: RunOptions): Promise<CommandResult | LiveData | NotifyResult> {
+export async function runPlugin(opts: RunOptions): Promise<unknown> {
   const { file, plugin } = opts
   const iso: Isolation = await requireIsolation()
   const session = opts.session ?? new Session()
@@ -258,7 +257,7 @@ export async function runPlugin(opts: RunOptions): Promise<CommandResult | LiveD
     child.on('message', (raw: unknown) => {
       if (!raw || typeof raw !== 'object') return
       const msg = raw as Record<string, unknown>
-      if (msg.t === 'done') return finish(() => resolve((msg.value ?? {}) as CommandResult | LiveData | NotifyResult))
+      if (msg.t === 'done') return finish(() => resolve(msg.value ?? {}))
       if (msg.t === 'error') {
         const code = typeof msg.code === 'string' ? msg.code : 'MALHA_PLUGIN'
         return finish(() => reject(new PluginError(`${plugin.name} ${label} failed: ${sanitize(String(msg.message))}`, code)))

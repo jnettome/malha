@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { build } from './build.ts'
+import { analytics } from './analytics.ts'
 import { check } from './check.ts'
 import { dev } from './dev.ts'
 import { init, writeSchema } from './init.ts'
@@ -20,11 +21,14 @@ Usage
   malha dev [file]            open the viewer; the page reloads when the file changes, live plugins refresh it
                                 --port 5199  --host 127.0.0.1  --no-plugins
   malha validate [file]       schema, references and standards; exit 1 on errors   --strict
-  malha build [file]          static site with the data inside   --out malha-site  --no-scan
+  malha build [file]          static site with the data inside   --out malha-site  --no-scan  --no-analytics
   malha scan [file]           known vulnerabilities in every app's dependencies
                                 --code-dir <dir> (or $MALHA_CODE_DIR)  --app <id>  --no-fetch  --offline
   malha check [file]          what needs a person: expiring domains, full nodes, single-node databases, vulnerabilities
                                 --live  --notify  --digest  --json  --fail-on critical|warning|none  --vulns critical|high|medium
+  malha analytics [file]      traffic per app from Umami, Google Analytics, PostHog and Search Console
+  malha analytics refresh [file]   fetch the last 7, 30 and 90 days   --days N  --from YYYY-MM-DD --to YYYY-MM-DD  --timezone UTC
+  malha analytics detect [file]    find the trackers on each app's pages; propose its analytics sources   --dry-run  --yes
   malha schema [dir]          write topology.schema.json for editor autocomplete
 
 Plugins (listed in malha.plugins.json next to the file; see docs/plugins.md)
@@ -152,9 +156,9 @@ async function main(argv: string[]) {
       return
     }
     case 'build': {
-      const p = parse(rest, ['no-scan'])
-      checkFlags(p, ['out', 'no-scan'])
-      return build(topologyPath(p.positionals[0]), resolve(one(p, 'out') ?? 'malha-site'), { scan: !has(p, 'no-scan') })
+      const p = parse(rest, ['no-scan', 'no-analytics'])
+      checkFlags(p, ['out', 'no-scan', 'no-analytics'])
+      return build(topologyPath(p.positionals[0]), resolve(one(p, 'out') ?? 'malha-site'), { scan: !has(p, 'no-scan'), analytics: !has(p, 'no-analytics') })
     }
     case 'scan': {
       const p = parse(rest, ['no-fetch', 'offline'])
@@ -176,6 +180,14 @@ async function main(argv: string[]) {
           '  malha plugin add cloudflare [file] && malha cloudflare zones [file]\n' +
           'They take the same credentials. See docs/plugins.md.',
       )
+    case 'analytics': {
+      const sub = ['show', 'refresh', 'detect'].includes(rest[0]) ? rest[0] : undefined
+      const p = parse(sub ? rest.slice(1) : rest, ['yes', 'dry-run'])
+      checkFlags(p, ['days', 'from', 'to', 'timezone', 'yes', 'dry-run'])
+      const days = one(p, 'days') === undefined ? undefined : Number(one(p, 'days'))
+      if (days !== undefined && (!Number.isInteger(days) || days < 1 || days > 365)) throw new Error('--days takes a whole number from 1 to 365')
+      return analytics(topologyPath(p.positionals[0]), sub, { days, from: one(p, 'from'), to: one(p, 'to'), timezone: one(p, 'timezone') ?? Intl.DateTimeFormat().resolvedOptions().timeZone, yes: has(p, 'yes'), dryRun: has(p, 'dry-run') })
+    }
     case 'check': {
       const p = parse(rest, ['live', 'notify', 'digest', 'json'])
       checkFlags(p, ['live', 'notify', 'digest', 'json', 'fail-on', 'vulns'])

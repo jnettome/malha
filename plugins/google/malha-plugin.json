@@ -1,0 +1,22 @@
+{
+  "$schema": "../../schema/plugin.schema.json",
+  "name": "google",
+  "version": "0.1.0",
+  "description": "Reads Google Analytics 4 (visitors, pageviews, top pages, sources, countries, devices) and Search Console (clicks, impressions, position, top queries and pages) with one read-only service account.",
+  "main": "index.js",
+  "permissions": {
+    "fetch": [
+      "POST https://oauth2.googleapis.com/token",
+      "POST https://analyticsdata.googleapis.com/v1beta/properties/*",
+      "GET https://analyticsadmin.googleapis.com/v1beta/*",
+      "GET https://www.googleapis.com/webmasters/v3/sites",
+      "POST https://www.googleapis.com/webmasters/v3/sites/*"
+    ],
+    "env": ["GOOGLE_SERVICE_ACCOUNT"],
+    "files": ["~/.config/malha/google-service-account.json"]
+  },
+  "analytics": {
+    "providers": ["ga4", "search-console"],
+    "description": "GA4 properties and Search Console properties the service account can read; detect matches GA4 measurement ids and each app's domains"
+  }
+}

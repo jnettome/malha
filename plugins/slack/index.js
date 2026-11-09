@@ -5,6 +5,7 @@ const AREAS = [
   ['Nodes', ['node-degraded', 'pod-pressure']],
   ['Databases', ['single-node-database']],
   ['Dependencies', ['scan-stale', 'vulnerability']],
+  ['Traffic', ['analytics-stale', 'analytics-error', 'traffic-drop']],
 ]
 const SHOWN = 10
 const MARK = { critical: ':red_circle:', warning: ':large_yellow_circle:' }

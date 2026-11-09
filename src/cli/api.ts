@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { basename, dirname } from 'node:path'
 import { createLive, type Live } from '../plugins/live.ts'
 import { loadTopology, type Loaded } from './load.ts'
+import { analyticsPath } from './analytics.ts'
 import { display, scanPath } from './paths.ts'
 
 export interface Api {
@@ -63,9 +64,10 @@ export function createApi(file: string, opts: ApiOptions = {}): Api {
   }
   watchFor(file)
   watchFor(scan)
+  watchFor(analyticsPath(file))
   // .malha/ may not exist until the first scan; watch its parent for its creation too.
   // Plugins also create it (for approvals and their log); only a scan matters here.
-  if (!existsSync(dirname(scan))) watchers.push(watch(dirname(file), (_e, name) => name === '.malha' && existsSync(scan) && notify()))
+  if (!existsSync(dirname(scan))) watchers.push(watch(dirname(file), (_e, name) => name === '.malha' && (existsSync(scan) || existsSync(analyticsPath(file))) && notify()))
 
   const json = (res: ServerResponse, status: number, body: unknown) => {
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
@@ -83,7 +85,8 @@ export function createApi(file: string, opts: ApiOptions = {}): Api {
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) return 'wrong token'
   }
 
-  function answer(req: IncomingMessage, res: ServerResponse) {
+  /** A small JSON body from a page this server served (see answerAllowed). */
+  function readBody(req: IncomingMessage, res: ServerResponse, then: (body: Record<string, unknown>) => void) {
     const refused = answerAllowed(req)
     if (refused) return json(res, 403, { error: refused })
     let body = ''
@@ -93,15 +96,30 @@ export function createApi(file: string, opts: ApiOptions = {}): Api {
       if (body.length > 4096) req.destroy()
     })
     req.on('end', () => {
-      let parsed: { id?: unknown; answer?: unknown }
+      let parsed: unknown
       try {
-        parsed = JSON.parse(body) as typeof parsed
+        parsed = JSON.parse(body)
       } catch {
         return json(res, 400, { error: 'not JSON' })
       }
-      const { id, answer: a } = parsed
+      if (!parsed || typeof parsed !== 'object') return json(res, 400, { error: 'not a JSON object' })
+      then(parsed as Record<string, unknown>)
+    })
+  }
+
+  function answer(req: IncomingMessage, res: ServerResponse) {
+    readBody(req, res, ({ id, answer: a }) => {
       if (typeof id !== 'string' || (a !== 'once' && a !== 'always' && a !== 'deny')) return json(res, 400, { error: 'want { id, answer: once | always | deny }' })
       json(res, live?.answer(id, a) ? 200 : 404, { ok: true })
+    })
+  }
+
+  /** Fetch a date range of traffic for the page's picker; answers when it is written. */
+  function fetchRange(req: IncomingMessage, res: ServerResponse) {
+    readBody(req, res, ({ from, to }) => {
+      if (typeof from !== 'string' || typeof to !== 'string') return json(res, 400, { error: 'want { from, to } as YYYY-MM-DD' })
+      if (!live) return json(res, 409, { error: 'plugins are off: start malha dev without --no-plugins to fetch traffic' })
+      void live.fetchRange(from, to).then(({ status, ...body }) => json(res, status, body))
     })
   }
 
@@ -126,12 +144,21 @@ export function createApi(file: string, opts: ApiOptions = {}): Api {
         json(res, 200, existsSync(scan) ? readFileSync(scan, 'utf8') : 'null')
         return true
       }
+      if (path === 'api/analytics.json') {
+        const traffic = analyticsPath(file)
+        json(res, 200, existsSync(traffic) ? readFileSync(traffic, 'utf8') : 'null')
+        return true
+      }
       if (path === 'api/live.json') {
         json(res, 200, live ? live.snapshot() : 'null')
         return true
       }
       if (path === 'api/answer' && req.method === 'POST') {
         answer(req, res)
+        return true
+      }
+      if (path === 'api/analytics/range' && req.method === 'POST') {
+        fetchRange(req, res)
         return true
       }
       if (path === 'api/events') {
@@ -144,7 +171,8 @@ export function createApi(file: string, opts: ApiOptions = {}): Api {
       json(res, 404, { error: 'no such endpoint' })
       return true
     },
-    injectToken: (html) => html.replace('</head>', `<meta name="malha-token" content="${token}">\n</head>`),
+    // Without plugins there is nothing to answer or fetch, so the page gets no token to ask with.
+    injectToken: (html) => (live ? html.replace('</head>', `<meta name="malha-token" content="${token}">\n</head>`) : html),
     close() {
       clearTimeout(timer)
       live?.close()

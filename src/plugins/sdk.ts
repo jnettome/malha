@@ -1,11 +1,12 @@
 // The plugin API: what a plugin's entry module exports, and the `ctx` it is called with.
 // Plugin authors get these types from `malha/plugin`. Docs: docs/plugins.md.
 
+import type { AnalyticsRequest, AnalyticsSource, Provider, SourceResult, Trackers } from '../core/analytics.ts'
 import type { CheckFinding } from '../core/check.ts'
 import type { LiveNode } from '../core/live.ts'
 import type { Topology } from '../core/types.ts'
 
-export type { CheckFinding, LiveNode, Topology }
+export type { AnalyticsRequest, AnalyticsSource, CheckFinding, LiveNode, Provider, SourceResult, Topology, Trackers }
 
 /** What `exec` returns. A non-zero exit code is not an error; check `code`. */
 export interface ExecResult {
@@ -109,6 +110,20 @@ export interface Plugin {
   live?: (ctx: PluginContext) => Promise<LiveData>
   /** Called by `malha check --notify` with what to announce. */
   notify?: (ctx: PluginContext, report: CheckReport) => Promise<NotifyResult>
+  /** Called by `malha analytics refresh` with this plugin's sources and the date ranges. */
+  analytics?: (ctx: PluginContext, request: AnalyticsRequest) => Promise<{ results: SourceResult[] }>
+  /** Called by `malha analytics detect` with the trackers found on each app's pages; returns the sources they are. */
+  link?: (ctx: PluginContext, request: LinkRequest) => Promise<LinkResult>
+}
+
+export interface LinkRequest {
+  trackers: Trackers[]
+}
+
+export interface LinkResult {
+  sources: { app: string; source: AnalyticsSource }[]
+  /** Lines for the person: what could not be matched, and why. */
+  notes?: string[]
 }
 
 /** malha-plugin.json */
@@ -127,4 +142,5 @@ export interface Manifest {
   commands?: Record<string, string>
   live?: { every: number; description?: string }
   notify?: { description?: string }
+  analytics?: { providers: Provider[]; description?: string }
 }

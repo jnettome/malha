@@ -12,6 +12,7 @@ import { addPlugin, runCommand } from '../src/plugins/commands.ts'
 import { applyChanges, checkChanges, diffLines, render } from '../src/plugins/edit.ts'
 import { runPlugin, sanitize, type Answer, type Question } from '../src/plugins/host.ts'
 import { hashPlugin, readManifest } from '../src/plugins/manifest.ts'
+import { expandPatterns } from '../src/plugins/rules.ts'
 import { inspect, loadPlugin, readProject, type Resolved } from '../src/plugins/project.ts'
 import { checkPatterns, execWarning, matchExec, matchFetch, matchFile } from '../src/plugins/rules.ts'
 import { sandboxArgv } from '../src/plugins/sandbox.ts'
@@ -30,7 +31,8 @@ function scratch() {
 
 function resolved(dir: string, options: Record<string, unknown> = {}): Resolved {
   const { manifest, integrity, files } = inspect(dir)
-  return { name: manifest.name, dir, builtin: false, manifest, integrity, files, entry: { source: dir, options } }
+  const { patterns, problems } = expandPatterns(manifest.permissions.fetch, options)
+  return { name: manifest.name, dir, builtin: false, manifest: { ...manifest, permissions: { ...manifest.permissions, fetch: patterns } }, integrity, files, entry: { source: dir, options }, warnings: problems }
 }
 
 /** Answers every question with the next answer in the list (repeating the last), and records them. */

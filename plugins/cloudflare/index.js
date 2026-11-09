@@ -1,4 +1,5 @@
-// Cloudflare as the DNS host. The token needs Zone → Zone → Read, and Zone → DNS → Read for `records`.
+// Cloudflare as the DNS host, and its traffic analytics. The token needs Zone → Zone → Read, Zone →
+// DNS → Read for `records`, and Zone → Analytics → Read for traffic.
 
 const API = 'https://api.cloudflare.com/client/v4'
 const TWO_LEVEL = /\.(com|net|org|gov|edu|co|ac|ne|or)\.[a-z]{2}$/
@@ -52,7 +53,92 @@ const zones = async (ctx, auth) =>
 const providerChange = (topology, provider) =>
   (topology.providers ?? []).some((p) => p.id === provider) ? [] : [{ add: 'providers', item: { id: provider, name: 'Cloudflare', kind: 'saas' }, why: 'the domains name it as their DNS host' }]
 
+// ---- Traffic ------------------------------------------------------------------------------------
+
+/** One GraphQL query against Cloudflare's analytics. */
+async function graphql(ctx, auth, query, variables) {
+  const res = await ctx.fetch(`${API}/graphql`, { method: 'POST', headers: { authorization: `Bearer ${auth}`, 'content-type': 'application/json' }, body: JSON.stringify({ query, variables }) })
+  const body = await res.json().catch(() => ({}))
+  const problem = body.errors?.[0]?.message
+  if (problem) throw new Error(/authz|not authorized|permission/i.test(problem) ? 'the token cannot read analytics: give it Zone → Analytics → Read' : `Cloudflare: ${problem}`)
+  if (!res.ok) throw new Error(`Cloudflare answered ${res.status}`)
+  return body.data
+}
+
+// Daily groups for a range and the one before, and each range as a whole (unique visitors don't add
+// up across days).
+const TRAFFIC = `query ($zone: string!, $from: Date!, $to: Date!, $pfrom: Date!, $pto: Date!) {
+  viewer {
+    zones(filter: { zoneTag: $zone }) {
+      days: httpRequests1dGroups(limit: 400, filter: { date_geq: $from, date_leq: $to }, orderBy: [date_ASC]) { dimensions { date } sum { pageViews } uniq { uniques } }
+      before: httpRequests1dGroups(limit: 400, filter: { date_geq: $pfrom, date_leq: $pto }, orderBy: [date_ASC]) { dimensions { date } sum { pageViews } uniq { uniques } }
+      now: httpRequests1dGroups(limit: 1, filter: { date_geq: $from, date_leq: $to }) { sum { pageViews } uniq { uniques } }
+      then: httpRequests1dGroups(limit: 1, filter: { date_geq: $pfrom, date_leq: $pto }) { sum { pageViews } uniq { uniques } }
+    }
+  }
+}`
+
+function everyDay(range, rows) {
+  const byDay = new Map(rows.map((r) => [r.dimensions.date, { visitors: r.uniq?.uniques ?? 0, pageviews: r.sum?.pageViews ?? 0 }]))
+  const out = []
+  for (let t = Date.parse(`${range.from}T00:00:00Z`); t <= Date.parse(`${range.to}T00:00:00Z`); t += 86_400_000) {
+    const date = new Date(t).toISOString().slice(0, 10)
+    out.push({ date, ...(byDay.get(date) ?? { visitors: 0, pageviews: 0 }) })
+  }
+  return out
+}
+
+const bare = (h) => String(h ?? '').toLowerCase().replace(/^https?:\/\//, '').replace(/[/:?#].*$/, '').replace(/^www\./, '')
+
 export default {
+  async analytics(ctx, req) {
+    const auth = await token(ctx)
+    const byName = new Map((await zones(ctx, auth)).map((z) => [z.name, z]))
+    const results = []
+    for (const source of req.sources) {
+      const base = { app: source.app, provider: 'cloudflare', id: String(source.id) }
+      const zone = byName.get(bare(source.id))
+      if (!zone) {
+        results.push({ ...base, ok: false, error: `no zone ${source.id} in this Cloudflare account` })
+        continue
+      }
+      try {
+        const data = await graphql(ctx, auth, TRAFFIC, { zone: zone.id, from: req.range.from, to: req.range.to, pfrom: req.previous.from, pto: req.previous.to })
+        const z = data?.viewer?.zones?.[0] ?? {}
+        const sum = (rows) => (rows?.[0] ? { visitors: rows[0].uniq?.uniques ?? 0, pageviews: rows[0].sum?.pageViews ?? 0 } : { visitors: 0, pageviews: 0 })
+        results.push({ ...base, ok: true, totals: sum(z.now), previous: sum(z.then), series: everyDay(req.range, z.days ?? []), previousSeries: everyDay(req.previous, z.before ?? []) })
+      } catch (e) {
+        results.push({ ...base, ok: false, error: /older than|too far|retention|time range/i.test(e.message) ? `${e.message} (the free plan keeps a limited history)` : e.message })
+      }
+    }
+    return { results }
+  },
+
+  /** Each zone to the app that serves its apex (or the one app under it), for apps no tracker measures. */
+  async link(ctx, { trackers }) {
+    const [topology, found] = await Promise.all([ctx.topology(), token(ctx).then((auth) => zones(ctx, auth))])
+    const measured = new Set((topology.apps ?? []).filter((a) => (a.analytics ?? []).some((s) => ['umami', 'ga4', 'posthog', 'cloudflare'].includes(s.provider))).map((a) => a.id))
+    const tracked = new Set(trackers.filter((t) => t.umami.length || t.ga4.length || t.posthog.length).map((t) => t.app))
+    const sources = []
+    const notes = []
+    for (const zone of found) {
+      if (zone.status !== 'active') continue
+      const serves = (test) => trackers.filter((t) => t.hostnames.some((h) => !h.startsWith('*.') && test(bare(h))))
+      const exact = serves((h) => h === zone.name)
+      const owners = exact.length ? exact : serves((h) => h.endsWith(`.${zone.name}`))
+      if (owners.length !== 1) {
+        if (owners.length > 1) notes.push(`zone ${zone.name}: ${owners.map((t) => t.app).join(', ')} all serve it; add its traffic to the right app by hand`)
+        else notes.push(`zone ${zone.name}: no app lists it`)
+        continue
+      }
+      const app = owners[0].app
+      if (measured.has(app) || tracked.has(app)) continue
+      sources.push({ app, source: { provider: 'cloudflare', id: zone.name } })
+      measured.add(app)
+    }
+    return { sources, notes }
+  },
+
   commands: {
     async zones(ctx) {
       const provider = typeof ctx.options.provider === 'string' ? ctx.options.provider : 'cloudflare'
