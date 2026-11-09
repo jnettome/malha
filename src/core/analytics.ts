@@ -266,6 +266,49 @@ export function mainResult(results: SourceResult[]): MainResult | undefined {
 
 export type MainResult = SourceResult & { parts?: SourceResult[] }
 
+/** An app's search traffic: its Search Console properties added up, since each covers another of its
+ *  domains (a whitelabel, a second brand). Clicks and impressions add up; click rate is worked out
+ *  again from them, and position is weighted by impressions. `parts` lists the properties. */
+export function searchResult(results: SourceResult[]): MainResult | undefined {
+  const sc = results.filter((r) => r.provider === 'search-console' && r.ok && r.search)
+  if (sc.length < 2) return sc[0]
+  const searches = sc.map((r) => r.search!)
+  const totals = (list: SearchTotals[]): SearchTotals => {
+    const clicks = list.reduce((n, t) => n + t.clicks, 0)
+    const impressions = list.reduce((n, t) => n + t.impressions, 0)
+    return { clicks, impressions, ctr: impressions ? clicks / impressions : 0, position: impressions ? list.reduce((n, t) => n + t.position * t.impressions, 0) / impressions : 0 }
+  }
+  const points = (lists: SearchPoint[][]) => {
+    const days = new Map<string, SearchPoint>()
+    for (const p of lists.flat()) {
+      const d = days.get(p.date) ?? { date: p.date, clicks: 0, impressions: 0 }
+      days.set(p.date, { date: p.date, clicks: d.clicks + p.clicks, impressions: d.impressions + p.impressions })
+    }
+    return [...days.values()].sort((a, b) => a.date.localeCompare(b.date))
+  }
+  const rows = (lists: SearchQuery[][]) => {
+    const byKey = new Map<string, SearchQuery[]>()
+    for (const q of lists.flat()) byKey.set(q.key, [...(byKey.get(q.key) ?? []), q])
+    return [...byKey].map(([key, list]) => ({ key, ...totals(list) })).sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions).slice(0, 25)
+  }
+  const first = sc[0]
+  return {
+    app: first.app,
+    provider: 'search-console',
+    id: sc.map((r) => r.id).join(' + '),
+    ok: true,
+    search: {
+      totals: totals(searches.map((s) => s.totals)),
+      previous: searches.every((s) => s.previous) ? totals(searches.map((s) => s.previous!)) : undefined,
+      series: points(searches.map((s) => s.series)),
+      previousSeries: searches.every((s) => s.previousSeries) ? points(searches.map((s) => s.previousSeries!)) : undefined,
+      queries: rows(searches.map((s) => s.queries)),
+      pages: rows(searches.map((s) => s.pages)),
+    },
+    parts: sc,
+  }
+}
+
 /** Relative change from `before` to `now`; undefined when there is no baseline. */
 export function change(now: number | undefined, before: number | undefined) {
   if (now === undefined || before === undefined || before === 0) return undefined

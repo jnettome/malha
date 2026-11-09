@@ -748,3 +748,33 @@ describe('the cloudflare plugin', () => {
     expect(panelUrl({ provider: 'cloudflare', id: 'acme.example/../x' })).toBeUndefined()
   })
 })
+
+describe('an app with several Search Console properties', () => {
+  it('adds them up: clicks and impressions, click rate again, position by impressions, queries and pages merged', async () => {
+    const { searchResult } = await import('../src/core/analytics.ts')
+    const sc = (id: string, clicks: number, impressions: number, position: number, queries: [string, number, number, number][]): SourceResult => ({
+      app: 'shop', provider: 'search-console', id, ok: true,
+      search: {
+        totals: { clicks, impressions, ctr: clicks / impressions, position },
+        previous: { clicks: clicks / 2, impressions, ctr: 0, position },
+        series: [{ date: '2026-11-01', clicks, impressions }],
+        queries: queries.map(([key, c, i, p]) => ({ key, clicks: c, impressions: i, ctr: c / i, position: p })),
+        pages: [{ key: `https://${id.slice(10)}/`, clicks, impressions, ctr: clicks / impressions, position }],
+      },
+    })
+    const r = searchResult([
+      sc('sc-domain:acme.example', 90, 1000, 4, [['acme', 60, 300, 2], ['kettle', 30, 700, 5]]),
+      { app: 'shop', provider: 'ga4', id: '1', ok: true, totals: { visitors: 5 } },
+      sc('sc-domain:acme-partner.example', 10, 3000, 10, [['acme', 10, 100, 4]]),
+    ])!
+    expect(r.id).toBe('sc-domain:acme.example + sc-domain:acme-partner.example')
+    expect(r.search!.totals).toEqual({ clicks: 100, impressions: 4000, ctr: 0.025, position: 8.5 })
+    expect(r.search!.previous?.clicks).toBe(50)
+    expect(r.search!.series).toEqual([{ date: '2026-11-01', clicks: 100, impressions: 4000 }])
+    expect(r.search!.queries[0]).toEqual({ key: 'acme', clicks: 70, impressions: 400, ctr: 0.175, position: 2.5 })
+    expect(r.search!.pages.map((p) => p.key)).toEqual(['https://acme.example/', 'https://acme-partner.example/'])
+    expect(r.parts?.length).toBe(2)
+    // One property: as it is.
+    expect(searchResult([sc('sc-domain:acme.example', 1, 10, 1, [])])?.parts).toBeUndefined()
+  })
+})

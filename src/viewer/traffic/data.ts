@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { change, isRelative, mainResult, type AnalyticsCache, type AnalyticsFile, type MainResult, type Provider, type SeriesPoint, type SourceResult, type TopItem, type TopList } from '../../core/analytics.ts'
+import { change, isRelative, mainResult, searchResult, type AnalyticsCache, type AnalyticsFile, type MainResult, type Provider, type SeriesPoint, type SourceResult, type TopItem, type TopList } from '../../core/analytics.ts'
 import { TRAFFIC_BASELINE, TRAFFIC_DROP } from '../../core/check.ts'
 import { isLive, loadAnalytics } from '../source.ts'
 
@@ -53,7 +53,7 @@ export async function fetchRange(from: string, to: string): Promise<string | und
 export interface SiteRow {
   app: string
   main?: MainResult
-  search?: SourceResult
+  search?: MainResult
   failed: SourceResult[]
   providers: Provider[]
 }
@@ -67,7 +67,7 @@ export function siteRows(cache: AnalyticsCache): SiteRow[] {
       return {
         app,
         main: mainResult(mine),
-        search: mine.find((r) => r.provider === 'search-console' && r.ok && r.search),
+        search: searchResult(mine),
         failed: mine.filter((r) => !r.ok),
         providers: [...new Set(mine.filter((r) => r.ok).map((r) => r.provider))],
       }

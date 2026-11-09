@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { mainResult, panelUrl, sourceId, type AnalyticsCache, type AnalyticsFile, type DateRange, type SearchQuery, type SourceResult, type TopList } from '../../core/analytics.ts'
+import { mainResult, panelUrl, searchResult, sourceId, type AnalyticsCache, type AnalyticsFile, type DateRange, type SearchQuery, type SourceResult, type TopList } from '../../core/analytics.ts'
 import { model } from '../model/model.ts'
 import { useUi } from '../ui/state.tsx'
 import { BarList, CompareChart } from './charts.tsx'
@@ -27,7 +27,7 @@ function PanelLink({ source, period, label }: { source: SourceResult; period: An
   )
 }
 
-function SearchTable({ rows, label }: { rows: SearchQuery[]; label: string }) {
+function SearchTable({ rows, label, hosts = false }: { rows: SearchQuery[]; label: string; hosts?: boolean }) {
   if (!rows.length) return <p className="tbars__empty">No {label.toLowerCase()} in this period.</p>
   return (
     <div className="table-wrap">
@@ -45,7 +45,7 @@ function SearchTable({ rows, label }: { rows: SearchQuery[]; label: string }) {
           {rows.map((q) => (
             <tr key={q.key}>
               <td className="ttable__key" title={q.key}>
-                {q.key.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                {hosts ? q.key.replace(/^https?:\/\/(www\.)?/, '') : q.key.replace(/^https?:\/\/[^/]+/, '') || '/'}
               </td>
               <td className="num">{fmtFull(q.clicks)}</td>
               <td className="num ttable__wide">{fmtFull(q.impressions)}</td>
@@ -68,7 +68,7 @@ export function SiteView({ file, data, app, picked, onPick }: { file: AnalyticsF
   const domains = model.appById.get(app)?.domains ?? []
   const mine = data.results.filter((r) => r.app === app)
   const main = mainResult(mine)
-  const sc = mine.find((r) => r.provider === 'search-console' && r.ok && r.search)
+  const sc = searchResult(mine)
   const s = sc?.search
   const others = mine.filter((r) => r.ok && r.totals && r.provider !== 'search-console' && r.provider !== main?.provider)
   const notices = [...mine.filter((r) => !r.ok), ...mine.filter((r) => r.ok && r.note)]
@@ -188,13 +188,15 @@ export function SiteView({ file, data, app, picked, onPick }: { file: AnalyticsF
         <>
           <div className="tsection">
             <h2>Search</h2>
-            <PanelLink source={sc} period={data} label={`Search Console ${sc.id}`} />
+            {(sc.parts ?? [sc]).map((r) => (
+              <PanelLink key={r.id} source={r} period={data} label={`Search Console ${r.id.replace(/^sc-domain:/, '')}`} />
+            ))}
           </div>
           <div className="tiles">
             <Tile label="Clicks" now={s.totals.clicks} before={s.previous?.clicks} />
             <Tile label="Impressions" now={s.totals.impressions} before={s.previous?.impressions} warn={false} />
             <Tile label="Click rate" now={s.totals.ctr} shown={pct(s.totals.ctr)} note={s.previous ? `${pct(s.previous.ctr)} before` : ''} />
-            <Tile label="Average position" now={s.totals.position} shown={s.totals.position.toFixed(1)} note={s.previous ? `${s.previous.position.toFixed(1)} before; lower is better` : ''} />
+            <Tile label="Average position" now={s.totals.position} shown={s.totals.impressions ? s.totals.position.toFixed(1) : '—'} note={s.previous?.impressions ? `${s.previous.position.toFixed(1)} before; lower is better` : ''} />
           </div>
           {s.series.length > 1 && (
             <section className="tpanel tpanel--chart">
@@ -216,7 +218,7 @@ export function SiteView({ file, data, app, picked, onPick }: { file: AnalyticsF
             </section>
             <section className="tpanel">
               <h2 className="eyebrow">Pages in search</h2>
-              <SearchTable rows={s.pages} label="Page" />
+              <SearchTable rows={s.pages} label="Page" hosts={!!sc.parts} />
             </section>
           </div>
         </>

@@ -44,7 +44,7 @@ function Row({ row, period }: { row: SiteRow; period: string | undefined }) {
         {s ? fmt(s.totals.clicks) : '—'}
       </span>
       <span className="tsite__num tsite__wide" role="cell">
-        {s ? s.totals.position.toFixed(1) : '—'}
+        {s?.totals.impressions ? s.totals.position.toFixed(1) : '—'}
       </span>
     </a>
   )

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { change, customRange, DEFAULT_PERIOD, isRelative, mainResult, MAX_CUSTOM, normalizeAnalytics, pickPeriod, PRESETS, rangeKey, ranges, sourceId, TOP_LISTS, unlistedHosts, type AnalyticsCache, type AnalyticsFile, type AnalyticsRequest, type AnalyticsSource, type DateRange, type Provider, type SourceResult, type TopItem, type Trackers } from '../core/analytics.ts'
+import { change, customRange, DEFAULT_PERIOD, isRelative, mainResult, searchResult, MAX_CUSTOM, normalizeAnalytics, pickPeriod, PRESETS, rangeKey, ranges, sourceId, TOP_LISTS, unlistedHosts, type AnalyticsCache, type AnalyticsFile, type AnalyticsRequest, type AnalyticsSource, type DateRange, type Provider, type SourceResult, type TopItem, type Trackers } from '../core/analytics.ts'
 import { runPlugin, Session, type Asker } from '../plugins/host.ts'
 import { loadPlugins, type Resolved } from '../plugins/project.ts'
 import type { LinkResult } from '../plugins/sdk.ts'
@@ -212,14 +212,14 @@ export function printSummary(cache: AnalyticsCache, apps: { id: string; name: st
   const rows = ids.map((app) => {
     const mine = cache.results.filter((r) => r.app === app)
     const main = mainResult(mine)
-    const sc = mine.find((r) => r.provider === 'search-console' && r.ok)
+    const sc = searchResult(mine)
     return { app, main, sc, failed: mine.filter((r) => !r.ok), measured: mine.some((r) => r.provider !== 'search-console') }
   })
   rows.sort((a, b) => (b.main?.totals?.visitors ?? -1) - (a.main?.totals?.visitors ?? -1))
   for (const r of rows) {
     const name = (appNames.get(r.app) ?? r.app).padEnd(22)
     const v = r.main ? `${fmt(r.main.totals?.visitors).padStart(6)} visitors ${pct(change(r.main.totals?.visitors, r.main.previous?.visitors)).padEnd(6)} ${c.dim(r.main.parts ? `${r.main.provider} ×${r.main.parts.length}` : r.main.provider)}` : c.dim((r.measured ? 'no traffic source answered' : 'search only').padEnd(32))
-    const s = r.sc?.search ? `  ${fmt(r.sc.search.totals.clicks).padStart(5)} search clicks, position ${r.sc.search.totals.position.toFixed(1)}` : ''
+    const s = r.sc?.search ? `  ${fmt(r.sc.search.totals.clicks).padStart(5)} search clicks, position ${r.sc.search.totals.impressions ? r.sc.search.totals.position.toFixed(1) : '—'}` : ''
     console.log(`  ${name} ${v}${s}`)
     for (const f of r.failed) console.log(`  ${''.padEnd(22)} ${c.yellow(`${f.provider} ${f.id}: ${f.error ?? 'failed'}`)}`)
     for (const n of cache.results.filter((x) => x.app === r.app && x.ok && x.note)) console.log(`  ${''.padEnd(22)} ${c.yellow(`${n.provider} ${n.id}: ${n.note}`)}`)
