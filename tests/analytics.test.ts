@@ -16,6 +16,7 @@ import { checkPatterns, expandPatterns } from '../src/plugins/rules.ts'
 import type { LinkResult } from '../src/plugins/sdk.ts'
 
 const EXAMPLE = 'examples/acme/topology.yaml'
+const HOME = process.env.HOME
 const UUID = '7b8f1c2e-5a44-4d1e-9c3a-2f6e8d0b1a55'
 
 function scratch() {
@@ -39,6 +40,7 @@ const req = (sources: AnalyticsRequest['sources'], days = 3): AnalyticsRequest =
 afterEach(() => {
   vi.unstubAllGlobals()
   for (const k of ['UMAMI_USERNAME', 'UMAMI_PASSWORD', 'UMAMI_API_KEY', 'POSTHOG_PERSONAL_API_KEY', 'GOOGLE_SERVICE_ACCOUNT']) delete process.env[k]
+  process.env.HOME = HOME
 })
 
 describe('hosts from options', () => {
@@ -146,6 +148,70 @@ describe('the umami plugin', () => {
     // Umami 2 says "url" where 3 says "path".
     expect(r.results[0].top?.pages).toEqual([{ key: '/', value: 70 }])
     expect(calls).toContain('GET /api/websites/' + UUID + '/metrics?type=url')
+  })
+
+  it('sends a key for your own server as a bearer token, and the Cloud key only to Cloud', async () => {
+    const { writeFileSync, mkdirSync } = await import('node:fs')
+    const { file } = scratch()
+    // The Cloud key and a login both in the environment: your server gets the login.
+    process.env.UMAMI_API_KEY = 'cloud-key'
+    process.env.UMAMI_USERNAME = 'malha'
+    process.env.UMAMI_PASSWORD = 'pw'
+    const seen: string[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      const u = new URL(url)
+      const h = new Headers(init.headers)
+      seen.push(`${u.host} ${u.pathname.endsWith('/login') ? 'login' : (h.get('authorization') ?? `x-umami-api-key ${h.get('x-umami-api-key')}`)}`)
+      if (u.pathname === '/api/auth/login') return json({ token: 'session' })
+      if (u.pathname.endsWith('/stats')) return json({ pageviews: 1, visitors: 1, visits: 1, bounces: 0, totaltime: 0 })
+      if (u.pathname.endsWith('/pageviews')) return json({ pageviews: [], sessions: [] })
+      return json([])
+    })
+    const sources = [
+      { app: 'status', provider: 'umami' as const, id: UUID, hostnames: [] },
+      { app: 'admin', provider: 'umami' as const, id: UUID, host: 'https://api.umami.is', hostnames: [] },
+    ]
+    await runPlugin({ file, plugin: resolved('umami', { hosts: ['https://u.acme.example', 'https://api.umami.is'] }), run: { kind: 'analytics' }, input: req(sources), asker: yes })
+    expect(new Set(seen.filter((s) => s.startsWith('u.acme.example')))).toEqual(new Set(['u.acme.example login', 'u.acme.example Bearer session']))
+    expect(new Set(seen.filter((s) => s.startsWith('api.umami.is')))).toEqual(new Set(['api.umami.is x-umami-api-key cloud-key']))
+
+    // An API key for your own server, in the file: a bearer token, no login.
+    seen.length = 0
+    process.env.HOME = join(tmpdir(), `malha-home-${Date.now()}`)
+    mkdirSync(join(process.env.HOME, '.config', 'malha'), { recursive: true })
+    writeFileSync(join(process.env.HOME, '.config', 'malha', 'umami.json'), JSON.stringify({ 'https://u.acme.example': { apiKey: 'umami_server_key' } }))
+    await runPlugin({ file, plugin: resolved('umami', { hosts: ['https://u.acme.example'] }), run: { kind: 'analytics' }, input: req([sources[0]]), asker: yes })
+    expect(new Set(seen)).toEqual(new Set(['u.acme.example Bearer umami_server_key']))
+  })
+
+  it('matches a website to the app that serves its domain when no page showed it', async () => {
+    process.env.UMAMI_API_KEY = 'k'
+    const { file } = scratch()
+    vi.stubGlobal('fetch', async (url: string) =>
+      new URL(url).pathname === '/api/websites'
+        ? json({
+            data: [
+              { id: UUID, name: 'Status', domain: 'status.acme-status.example' },
+              { id: '11111111-2222-3333-4444-555555555555', name: 'Shared', domain: 'www.both.example' },
+              // The front-end of an app the topology knows by its API's hostname.
+              { id: '66666666-7777-8888-9999-000000000000', name: 'Front', domain: 'front.example' },
+            ],
+          })
+        : json({}, 404),
+    )
+    const none = { umami: [], ga4: [], gtm: [], posthog: [] }
+    const trackers = [
+      { app: 'status', hostnames: ['status.acme-status.example'], ...none },
+      { app: 'a', hostnames: ['both.example'], ...none },
+      { app: 'b', hostnames: ['www.both.example'], ...none },
+      { app: 'front', hostnames: ['api.front.example'], ...none },
+    ]
+    const r = (await runPlugin({ file, plugin: resolved('umami', { hosts: ['https://u.acme.example'] }), run: { kind: 'link' }, input: { trackers }, asker: yes })) as LinkResult
+    expect(r.sources).toEqual([
+      { app: 'status', source: { provider: 'umami', id: UUID } },
+      { app: 'front', source: { provider: 'umami', id: '66666666-7777-8888-9999-000000000000' } },
+    ])
+    expect(r.notes).toEqual(['website Shared on https://u.acme.example: a, b all serve www.both.example; add it to the right app by hand'])
   })
 
   it('reads Umami 2 numbers and Umami Cloud with an API key', async () => {

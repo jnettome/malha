@@ -1,7 +1,8 @@
 // Umami, cloud or self-hosted. options.hosts lists the servers ("https://api.umami.is" for Umami
-// Cloud). Credentials: UMAMI_API_KEY (Cloud), or UMAMI_USERNAME and UMAMI_PASSWORD (your server), or
-// ~/.config/malha/umami.json with one entry per host: { "https://u.example.com": { "username": …,
-// "password": … }, "https://api.umami.is": { "apiKey": … } }.
+// Cloud). Credentials, per server in ~/.config/malha/umami.json: { "https://u.example.com": { "apiKey":
+// … } or { "username": …, "password": … }, "https://api.umami.is": { "apiKey": … } }. Or, for one
+// server: UMAMI_API_KEY, or UMAMI_USERNAME and UMAMI_PASSWORD. Umami Cloud takes its key in
+// x-umami-api-key; Umami 3 on your server takes one as a bearer token.
 
 const CLOUD = 'https://api.umami.is'
 const CLOUD_SCRIPT = 'https://cloud.umami.is'
@@ -25,18 +26,22 @@ function auth(ctx) {
     if (cache.has(host)) return cache.get(host)
     file ??= await fileCredentials(ctx)
     const creds = file[host] ?? {}
-    const apiKey = creds.apiKey ?? (await ctx.env('UMAMI_API_KEY'))
     let headers
-    if (host === CLOUD || (apiKey && !creds.username)) {
-      if (!apiKey) throw new Error(`no API key for ${host}: set UMAMI_API_KEY, or "apiKey" for it in ~/.config/malha/umami.json`)
+    if (host === CLOUD) {
+      const apiKey = creds.apiKey ?? (await ctx.env('UMAMI_API_KEY'))
+      if (!apiKey) throw new Error(`no API key for ${host}: set "apiKey" for it in ~/.config/malha/umami.json, or UMAMI_API_KEY`)
       headers = { 'x-umami-api-key': apiKey, accept: 'application/json' }
     } else {
-      const username = creds.username ?? (await ctx.env('UMAMI_USERNAME'))
-      const password = creds.password ?? (await ctx.env('UMAMI_PASSWORD'))
-      if (!username || !password) throw new Error(`no login for ${host}: set UMAMI_USERNAME and UMAMI_PASSWORD, or put them for it in ~/.config/malha/umami.json`)
-      const res = await ctx.fetch(`${api(host)}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }) })
-      if (!res.ok) throw new Error(`${host} refused the login (${res.status})`)
-      headers = { authorization: `Bearer ${(await res.json()).token}`, accept: 'application/json' }
+      // The server's own entry first; then a login from the environment, then a key from it.
+      const login = creds.username ? creds : creds.apiKey ? {} : { username: await ctx.env('UMAMI_USERNAME'), password: await ctx.env('UMAMI_PASSWORD') }
+      const apiKey = creds.apiKey ?? (login.username && login.password ? undefined : await ctx.env('UMAMI_API_KEY'))
+      if (apiKey) headers = { authorization: `Bearer ${apiKey}`, accept: 'application/json' }
+      else {
+        if (!login.username || !login.password) throw new Error(`no API key or login for ${host}: put one for it in ~/.config/malha/umami.json, or set UMAMI_API_KEY, or UMAMI_USERNAME and UMAMI_PASSWORD`)
+        const res = await ctx.fetch(`${api(host)}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: login.username, password: login.password }) })
+        if (!res.ok) throw new Error(`${host} refused the login (${res.status})`)
+        headers = { authorization: `Bearer ${(await res.json()).token}`, accept: 'application/json' }
+      }
     }
     cache.set(host, headers)
     return headers
@@ -138,6 +143,7 @@ export default {
     const headersFor = auth(ctx)
     const sources = []
     const notes = []
+    const found = new Set()
     for (const t of trackers) {
       for (const u of t.umami) {
         let origin = new URL(u.script).origin
@@ -149,9 +155,35 @@ export default {
         try {
           await get(ctx, await headersFor(origin), `${api(origin)}/websites/${encodeURIComponent(u.website)}`)
           sources.push({ app: t.app, source: { provider: 'umami', id: u.website, ...(origin !== hosts[0] ? { host: origin } : {}) } })
+          found.add(u.website)
         } catch (e) {
           notes.push(`${t.app}: website ${u.website} on ${origin}: ${e.message}`)
         }
+      }
+    }
+
+    // Websites no page showed (a page that didn't answer, a tracker loaded later): by their domain.
+    const bare = (h) => String(h ?? '').toLowerCase().replace(/^https?:\/\//, '').replace(/[/:].*$/, '').replace(/^www\./, '')
+    for (const host of hosts) {
+      let websites
+      try {
+        const body = await get(ctx, await headersFor(host), `${api(host)}/websites?pageSize=200`)
+        websites = Array.isArray(body) ? body : (body?.data ?? [])
+      } catch (e) {
+        notes.push(`${host}: could not list its websites: ${e.message}`)
+        continue
+      }
+      for (const w of websites) {
+        if (!w?.id || found.has(w.id) || !w.domain) continue
+        // The app that serves the domain itself; else the one app serving something under it
+        // (acme.example for an app that lists only api.acme.example), like Search Console properties.
+        const serves = (test) => trackers.filter((t) => t.hostnames.some((h) => !h.startsWith('*.') && test(bare(h))))
+        const exact = serves((h) => h === bare(w.domain))
+        const owners = exact.length ? exact : serves((h) => h.endsWith(`.${bare(w.domain)}`))
+        if (owners.length === 1) {
+          sources.push({ app: owners[0].app, source: { provider: 'umami', id: w.id, ...(host !== hosts[0] ? { host } : {}) } })
+          found.add(w.id)
+        } else if (owners.length > 1) notes.push(`website ${w.name ?? w.domain} on ${host}: ${owners.map((t) => t.app).join(', ')} all serve ${w.domain}; add it to the right app by hand`)
       }
     }
     return { sources, notes }

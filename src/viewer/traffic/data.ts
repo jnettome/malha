@@ -83,10 +83,28 @@ export function delta(now: number | undefined, before: number | undefined) {
 
 const regions = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['en'], { type: 'region' }) : undefined
 
-/** One spelling per thing across providers: country names for codes ("DE" → "Germany"), and a
- *  capital first letter for devices, browsers and systems ("desktop" and "Desktop" are one). */
+/** Umami's browser ids, as the other providers name the same browsers. */
+const BROWSERS: Record<string, string> = {
+  'edge-chromium': 'Edge',
+  edge: 'Edge',
+  ios: 'Mobile Safari',
+  'ios-webview': 'Safari (in-app)',
+  crios: 'Chrome iOS',
+  fxios: 'Firefox iOS',
+  samsung: 'Samsung Internet',
+  'chromium-webview': 'Android WebView',
+  facebook: 'Facebook in-app',
+  instagram: 'Instagram in-app',
+  miui: 'MIUI Browser',
+  yandexbrowser: 'Yandex Browser',
+}
+
+/** One spelling per thing across providers: country names for codes ("DE" → "Germany"), browser
+ *  names for Umami's ids, and a capital first letter for devices, browsers and systems ("desktop"
+ *  and "Desktop" are one). */
 export function tidy(list: TopList, items: TopItem[]): TopItem[] {
   const name = (k: string) => {
+    if (list === 'browsers' && BROWSERS[k]) return BROWSERS[k]
     if (list === 'countries' && /^[A-Z]{2}$/.test(k)) {
       try {
         return regions?.of(k) ?? k

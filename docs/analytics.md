@@ -64,13 +64,24 @@ Each plugin asks before it reads a credential or calls an API, like every Malha 
 
 `hosts` lists your Umami servers, or `https://api.umami.is` for Umami Cloud. The plugin may call only those hosts, and you approve each one by name.
 
+Credentials go in `~/.config/malha/umami.json`, one entry per server, so each server only ever sees its own:
+
+```json
+{
+  "https://umami.acme.example": { "apiKey": "umami_…" },
+  "https://api.umami.is": { "apiKey": "…" }
+}
+```
+
 | Server | Credentials |
 | --- | --- |
-| Umami Cloud | An API key from Settings → API keys: `UMAMI_API_KEY`. |
-| Your own | A user that can view the websites: `UMAMI_USERNAME` and `UMAMI_PASSWORD`. |
-| Several | `~/.config/malha/umami.json`: `{ "https://umami.acme.example": { "username": "…", "password": "…" }, "https://api.umami.is": { "apiKey": "…" } }` |
+| Umami Cloud | An API key from Settings → API keys. Sent in `x-umami-api-key`. |
+| Your own, Umami 3 | An API key from your Umami, sent as a bearer token. Or a login, below. |
+| Your own, Umami 2 | A user that can view the websites: `{ "username": "…", "password": "…" }`. A view-only member of a team that holds the websites is enough; an admin sees every website. |
 
-Works with Umami 2 and 3.
+With a single server, the variables `UMAMI_API_KEY`, or `UMAMI_USERNAME` and `UMAMI_PASSWORD`, work instead of the file; on your own server a login in the variables wins over a key there, and only Cloud gets `UMAMI_API_KEY` when both are set.
+
+`malha analytics detect` finds websites from the script on each app's pages, and also lists each server's websites and gives each to the app that serves its domain, or the one app serving something under it (`acme.example` for an app listing only `api.acme.example`). Works with Umami 2 and 3.
 
 ### Google Analytics 4 and Search Console
 
