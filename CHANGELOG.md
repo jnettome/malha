@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 
 Traffic: every site's visitors and search in one place, and the first version on npm.
 
