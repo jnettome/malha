@@ -158,7 +158,7 @@ The schema is `schema/plugin.schema.json`; the `$schema` line in the template gi
 ### `index.js`
 
 ```js
-/** @type {import('malha/plugin').Plugin} */
+/** @type {import('@malha/cli/plugin').Plugin} */
 export default {
   commands: {
     async sync(ctx) {
@@ -241,7 +241,7 @@ Declare `"notify": {}` in the manifest, and a `fetch` pattern for exactly the se
 
 ### Analytics
 
-`analytics(ctx, request)` gets `{ range, previous, timezone, sources }`: whole days ending yesterday, the same number of days before, and the sources it serves, each `{ app, provider, id, host?, hostnames }`. It returns `{ results }`, one per source: `{ app, provider, id, ok, error?, note?, totals, previous, series, previousSeries, top }`, or `search` for Search Console. `previousSeries` is the previous period day by day, for the comparison line; `top` has up to 25 each of `pages` (in views), `referrers` (in visits), `countries`, `devices`, `browsers` and `os` (in visitors). The shapes are `SourceResult` in `malha/plugin`; Malha keeps only the sources it asked for and well-formed numbers.
+`analytics(ctx, request)` gets `{ range, previous, timezone, sources }`: whole days ending yesterday, the same number of days before, and the sources it serves, each `{ app, provider, id, host?, hostnames }`. It returns `{ results }`, one per source: `{ app, provider, id, ok, error?, note?, totals, previous, series, previousSeries, top }`, or `search` for Search Console. `previousSeries` is the previous period day by day, for the comparison line; `top` has up to 25 each of `pages` (in views), `referrers` (in visits), `countries`, `devices`, `browsers` and `os` (in visitors). The shapes are `SourceResult` in `@malha/cli/plugin`; Malha keeps only the sources it asked for and well-formed numbers.
 
 `link(ctx, { trackers })` gets what `malha analytics detect` found on each app's pages (Umami website ids and script URLs, GA4 measurement ids, Tag Manager containers, PostHog keys and hosts, and the app's hostnames) and returns `{ sources: [{ app, source }], notes }`: the sources those trackers are, and lines about anything it could not match.
 

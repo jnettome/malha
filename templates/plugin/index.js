@@ -3,7 +3,7 @@
 // to plain JavaScript, or bundle any dependencies into this folder.
 // API: https://github.com/jnettome/malha/blob/main/docs/plugins.md
 
-/** @type {import('malha/plugin').Plugin} */
+/** @type {import('@malha/cli/plugin').Plugin} */
 export default {
   commands: {
     async hello(ctx) {

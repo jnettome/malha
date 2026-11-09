@@ -29,7 +29,7 @@ It is a local tool. Nothing is uploaded anywhere unless you run `scan` or a plug
 Malha needs Node 20.19 or newer.
 
 ```bash
-npm install -g malha        # or, without installing: npx malha <command>
+npm install -g @malha/cli    # or, without installing: npx @malha/cli <command>
 ```
 
 To work on Malha itself, see [Developing Malha](#developing-malha).
@@ -65,7 +65,7 @@ Editors with the YAML language server (VS Code, Cursor) read `topology.schema.js
 `malha validate` in CI:
 
 ```yaml
-- run: npx malha validate infra/topology.yaml --strict
+- run: npx @malha/cli validate infra/topology.yaml --strict
 ```
 
 ## The file
@@ -360,7 +360,7 @@ npm run e2e        # browser tests against the built CLI (build first); PLAYWRIG
 | `src/core/` | Types, cross-reference checks and hostname matching, shared by the CLI and the viewer. |
 | `src/cli/` | The commands. `api.ts` is the data side of `dev`, also mounted into Vite for `npm run dev`. |
 | `src/viewer/` | The React app. `source.ts` loads the data: embedded by `build`, or from `dev`'s `api/`; `live.ts` holds live plugin data. |
-| `src/plugins/` | The plugin system. `sdk.ts` is the API plugins see (published as `malha/plugin`); `host.ts` runs one sandboxed plugin process and checks its requests; `sandbox.ts` picks the isolation; `runtime.ts` and `lockdown.ts` run inside the sandbox; `edit.ts` applies proposed changes to the YAML text; `live.ts` runs live plugins for `dev`. |
+| `src/plugins/` | The plugin system. `sdk.ts` is the API plugins see (published as `@malha/cli/plugin`); `host.ts` runs one sandboxed plugin process and checks its requests; `sandbox.ts` picks the isolation; `runtime.ts` and `lockdown.ts` run inside the sandbox; `edit.ts` applies proposed changes to the YAML text; `live.ts` runs live plugins for `dev`. |
 | `plugins/` | Plugins that ship with Malha (`kubernetes`). |
 | `templates/`, `examples/` | The `init` starter, the `plugin new` template, and the Acme example. |
 | `tests/fixtures/` | A fake `kubectl` and a `probe` plugin that tries every way out of the sandbox. |

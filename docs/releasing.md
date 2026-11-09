@@ -1,21 +1,23 @@
 # Releasing Malha
 
-A release is a git tag. Pushing `vX.Y.Z` runs the Release workflow, which checks and tests the tagged commit, publishes `malha` to npm, and creates a GitHub Release with the same package attached as a `.tgz` and the version's changelog section as its notes.
+A release is a git tag. Pushing `vX.Y.Z` runs the Release workflow, which checks and tests the tagged commit, publishes `@malha/cli` to npm, and creates a GitHub Release with the same package attached as a `.tgz` and the version's changelog section as its notes.
 
 No secret is stored for this. npm accepts the package through [trusted publishing](https://docs.npmjs.com/trusted-publishers): the workflow proves with a short-lived GitHub OIDC token that it is `release.yml` in `jnettome/malha`, and npm records [provenance](https://docs.npmjs.com/generating-provenance-statements) linking each version to the commit and workflow run that built it.
 
 ## Once: setting up npm
 
-npm sets trusted publishers per package, so the very first version goes up by hand, from the account that will own `malha`:
+The package is `@malha/cli`, in the npm organization `malha` (npm refused the unscoped name `malha` as too similar to `mocha` and `hasha`; scoped names aren't checked). The command it installs is still `malha`.
+
+npm sets trusted publishers per package, so the very first version goes up by hand, from an account in the `malha` organization (npmjs.com → Add Organization, free for public packages):
 
 ```bash
-git checkout v0.5.0            # the first public release, tagged as usual
+git checkout v0.6.0            # the first version on npm, tagged as usual
 npm ci && npm run build
 npm login                      # with two-factor authentication on
 npm publish --provenance=false # provenance needs CI; later versions have it
 ```
 
-Then on npmjs.com: the `malha` package → Settings → Trusted publishing → GitHub Actions, with owner `jnettome`, repository `malha` and workflow `release.yml`. Under "Publishing access", require two-factor authentication and disallow tokens: from then on only the workflow can publish. If npm offers to add the trusted publisher before the package exists, do that instead and skip the manual publish.
+Then on npmjs.com: the `@malha/cli` package → Settings → Trusted publishing → GitHub Actions, with owner `jnettome`, repository `malha` and workflow `release.yml`. Under "Publishing access", require two-factor authentication and disallow tokens: from then on only the workflow can publish. If npm offers to add the trusted publisher before the package exists, do that instead and skip the manual publish.
 
 ## Choosing the version
 
@@ -53,13 +55,13 @@ Then it renames `## Unreleased` to `## 0.2.0`, sets the version in `package.json
 ```bash
 gh run watch --repo jnettome/malha "$(gh run list --repo jnettome/malha --workflow Release --limit 1 --json databaseId -q '.[0].databaseId')"
 gh release view v0.2.0 --repo jnettome/malha
-npm view malha version dist-tags     # 0.2.0 is "latest"
+npm view @malha/cli version dist-tags   # 0.2.0 is "latest"
 ```
 
 Then install it the way users do and run it once:
 
 ```bash
-npm install -g malha@0.2.0
+npm install -g @malha/cli@0.2.0
 malha --version && malha validate path/to/topology.yaml
 npm audit signatures                 # in a project that depends on malha: checks the provenance
 ```
@@ -69,7 +71,7 @@ npm audit signatures                 # in a project that depends on malha: check
 Users upgrade with npm, then refresh the editor schema next to their topology:
 
 ```bash
-npm install -g malha@latest
+npm install -g @malha/cli@latest
 malha schema infra
 ```
 

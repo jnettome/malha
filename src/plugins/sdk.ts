@@ -1,5 +1,5 @@
 // The plugin API: what a plugin's entry module exports, and the `ctx` it is called with.
-// Plugin authors get these types from `malha/plugin`. Docs: docs/plugins.md.
+// Plugin authors get these types from `@malha/cli/plugin`. Docs: docs/plugins.md.
 
 import type { AnalyticsRequest, AnalyticsSource, Provider, SourceResult, Trackers } from '../core/analytics.ts'
 import type { CheckFinding } from '../core/check.ts'

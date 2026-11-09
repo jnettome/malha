@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-Traffic: every site's visitors and search in one place.
+Traffic: every site's visitors and search in one place, and the first version on npm.
 
+- **On npm as `@malha/cli`.** npm refused the unscoped name `malha` as too similar to `mocha` and `hasha`, so the package lives in the `malha` organization. The command is still `malha`: `npm install -g @malha/cli`, or `npx @malha/cli <command>`. Plugin types are `@malha/cli/plugin`.
 - The **Traffic** tab: visitors, pageviews, search clicks and impressions with their change against the previous period; every site with its daily trend; top search queries, referrers and pages; sources that could not be read. The app panel shows the app's own trend, pages and queries.
 - `malha analytics refresh` fetches traffic into `.malha/analytics.json`; `malha dev` refreshes it every 6 hours, and `malha build` embeds it (`--no-analytics` leaves it out). `malha analytics` prints it.
 - `malha analytics detect` finds the trackers on each app's pages (Umami, GA4, Tag Manager, PostHog) and proposes its `analytics` sources, which plugins match to properties and projects; what no page showed is matched by address, and what no app claims is listed.
@@ -21,8 +22,8 @@ Traffic: every site's visitors and search in one place.
 Open source. The first version in this public repository.
 
 - MIT license.
-- Published to npm as `malha` (it was `@jnettome/malha`, on GitHub Packages): `npm install -g malha`, or `npx malha`. Releases publish from GitHub Actions with npm trusted publishing and provenance.
-- Plugin types are `malha/plugin` (they were `@jnettome/malha/plugin`).
+- Set up for npm (it was `@jnettome/malha`, on GitHub Packages). Releases publish from GitHub Actions with npm trusted publishing and provenance; the first one on npm is 0.6.0, as `@malha/cli`.
+- Plugin types moved from `@jnettome/malha/plugin` (in 0.6.0 they are `@malha/cli/plugin`).
 - Every example in the docs uses the fictional Acme setup.
 
 ## 0.4.0
