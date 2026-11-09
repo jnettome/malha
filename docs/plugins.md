@@ -5,7 +5,7 @@ A plugin teaches Malha about something it doesn't know: your cluster, your cloud
 - **Commands** read the outside world and **propose changes** to `topology.yaml`. You see them as a diff, and nothing is written until you say yes. `malha kubernetes import` drafts nodes, apps and hostnames from a cluster.
 - **Live data** refreshes the open viewer while `malha dev` runs. The `kubernetes` plugin shows CPU, memory and pods per node, every 30 seconds.
 - **Notifiers** deliver what `malha check --notify` finds. The `discord` and `slack` plugins post it to a channel.
-- **Analytics** plugins read traffic for `malha analytics refresh` and the Traffic tab: `umami`, `google` (GA4 and Search Console) and `posthog`.
+- **Analytics** plugins read traffic for `malha analytics refresh` and the Traffic tab: `umami`, `google` (GA4 and Search Console), `posthog`, and `cloudflare` (visitors per domain, for sites no tracker measures).
 
 Plugin code runs in a sandbox, and everything it does outside its own folder is a request that Malha checks against what the plugin declared, then asks you about, the way Claude Code asks before it runs a command.
 
@@ -291,13 +291,13 @@ They keep `domains` in step with the registrar and the DNS host, propose changes
 | `malha cloudflare zones` | `dns` and `plan` for every zone in the account; new entries for the ones the file lacks. Lists zones that are not active, and domains the file says are on this Cloudflare that are not. |
 | `malha cloudflare records` | Follows every A, AAAA and CNAME record (through CNAME chains) to the machine it reaches. A name no app lists goes to the app with the most trailing labels in common (`beta.shop.acme.example` to the app with `shop.acme.example`), when one app clearly wins; a machine reached with no HTTP link gets one from the `users` node. Reports records that point at retired machines, at addresses no machine has, and app hostnames with no record. |
 
-Credentials: `PORKBUN_API_KEY` and `PORKBUN_SECRET_API_KEY` (or `~/.config/malha/porkbun-api-key` and `porkbun-secret-api-key`; the older `~/.config/porkbun/` paths still work), with API access on for the account. `CLOUDFLARE_API_TOKEN` (or `~/.config/malha/cloudflare-token`), with Zone → Zone → Read, and Zone → DNS → Read for `records`. Each plugin may call only its own API.
+Credentials: `PORKBUN_API_KEY` and `PORKBUN_SECRET_API_KEY` (or `~/.config/malha/porkbun-api-key` and `porkbun-secret-api-key`; the older `~/.config/porkbun/` paths still work), with API access on for the account. `CLOUDFLARE_API_TOKEN` (or `~/.config/malha/cloudflare-token`), with Zone → Zone → Read, Zone → DNS → Read for `records`, and Zone → Analytics → Read for traffic. Each plugin may call only its own API. The `cloudflare` plugin is also an analytics plugin: see below.
 
 ## The `discord` and `slack` plugins
 
 Notifiers for `malha check --notify`: the findings by area (at most ten vulnerabilities, then a count), the resolved ones, and the command to see everything. The webhook comes from `DISCORD_WEBHOOK_URL` or `~/.config/malha/discord-webhook` (`SLACK_WEBHOOK_URL`, `~/.config/malha/slack-webhook`), and must be on Discord's (or Slack's) own host. Discord messages are split at 2000 characters and never mention anyone. Setting them up, and running the check daily: [docs/checks.md](checks.md).
 
-## The `umami`, `google` and `posthog` plugins
+## The `umami`, `google`, `posthog` and `cloudflare` traffic plugins
 
 They read traffic for `malha analytics refresh` and the Traffic tab, and match trackers for `malha analytics detect`. Setup for each, and what their numbers mean: [analytics.md](analytics.md).
 
@@ -305,4 +305,5 @@ They read traffic for `malha analytics refresh` and the Traffic tab, and match t
 | --- | --- | --- |
 | `umami` | Umami Cloud, or your servers (`options.hosts`) | `UMAMI_API_KEY`, or `UMAMI_USERNAME` and `UMAMI_PASSWORD`, or `~/.config/malha/umami.json` per host |
 | `google` | GA4 and Search Console | A service account's JSON key: `GOOGLE_SERVICE_ACCOUNT` or `~/.config/malha/google-service-account.json` |
-| `posthog` | PostHog Cloud or your instance (`options.hosts`) | A personal API key with Organization, Project and Query read: `POSTHOG_PERSONAL_API_KEY` or `~/.config/malha/posthog-key` |
+| `posthog` | PostHog Cloud or your instance (`options.hosts`) | A personal API key with Organization, Project and Query read: `POSTHOG_PERSONAL_API_KEY` or `~/.config/malha/posthog-key` (one per line for several accounts) |
+| `cloudflare` | Visitors and page views per zone, for apps no tracker measures (bots included) | The same token as above, with Zone → Analytics → Read |

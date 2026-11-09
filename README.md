@@ -159,9 +159,12 @@ Registry data (whois) usually shows a company's headquarters, not its datacenter
     - { name: shop-db, engine: postgres, nodes: [w1, w2] }
   uses: [s3, ses]                         # node ids it talks to
   depends_on: [api]                       # other apps it calls
+  analytics:                              # where its traffic is measured; malha analytics detect finds these
+    - { provider: ga4, id: "312345678" }
+    - { provider: search-console, id: "sc-domain:acme.example" }
 ```
 
-For something outside a cluster, use `host: <node id>` instead of `pods`. `meta.pods_sampled` dates the pod counts.
+For something outside a cluster, use `host: <node id>` instead of `pods`. A site you only want traffic for (hosted anywhere) needs just `id`, `name`, `category` and `domains`. `meta.pods_sampled` dates the pod counts.
 
 ### `domains`: what is registered where
 
@@ -265,17 +268,17 @@ Accept what you live with in [`accepted`](#accepted-findings-you-live-with). `--
 
 ## Traffic
 
-The Traffic tab puts every site's visitors and search traffic in one place. Plugins read Umami (cloud or self-hosted), Google Analytics 4 and Search Console (one read-only service account), and PostHog (cloud or self-hosted).
+The Traffic tab puts every site's visitors and search traffic in one place. Plugins read Umami (cloud or self-hosted), Google Analytics 4 and Search Console (one read-only service account), and PostHog (cloud or self-hosted); Cloudflare counts the proxied sites no tracker measures.
 
 ```bash
-malha plugin add google infra/topology.yaml    # or umami, posthog
+malha plugin add google infra/topology.yaml    # or umami, posthog, cloudflare
 malha analytics detect infra/topology.yaml     # finds the trackers on each app's pages; proposes its analytics sources
 malha analytics refresh infra/topology.yaml    # the last 7, 30 and 90 days, into .malha/analytics.json
 ```
 
 ![The Traffic tab](docs/traffic.png)
 
-Pick the last 7, 30 or 90 days, or any range; click a site for everything about it, against the previous period, with links to each source's own dashboard. `malha check` flags sites whose traffic falls by half or stops. Setup for each provider, and what each number means: [docs/analytics.md](docs/analytics.md).
+Pick the last 7, 30 or 90 days, or any range; click a site for everything about it, against the previous period, with links to each source's own dashboard. `malha check` flags sites whose traffic falls by half or stops. Setup for each provider, a checklist for covering every site, and what each number means: [docs/analytics.md](docs/analytics.md).
 
 ## Domains and DNS
 
@@ -290,13 +293,25 @@ malha cloudflare records infra/topology.yaml   # hostnames for apps, links to ma
 | Plugin | Credentials |
 | --- | --- |
 | `porkbun` | `PORKBUN_API_KEY` and `PORKBUN_SECRET_API_KEY`, or `~/.config/malha/porkbun-api-key` and `porkbun-secret-api-key`. API access must be on for the account. |
-| `cloudflare` | `CLOUDFLARE_API_TOKEN`, or `~/.config/malha/cloudflare-token`. Zone → Zone → Read, plus Zone → DNS → Read for `records`. |
+| `cloudflare` | `CLOUDFLARE_API_TOKEN`, or `~/.config/malha/cloudflare-token`. Zone → Zone → Read, plus Zone → DNS → Read for `records` and Zone → Analytics → Read for traffic. |
 
 `cloudflare records` follows every A, AAAA and CNAME record to the machine it reaches. A name no app lists goes to the app with the closest names (`beta.shop.acme.example` to the app that has `shop.acme.example`); a machine that names reach without an HTTP link gets one. It also reports records that point at retired machines (remove them before someone else gets the address), at addresses no machine in the file has, and app hostnames with no record. `malha domains sync`, before 0.4.0, did the first two; it now points here.
 
 ## Plugins
 
-A plugin reads something Malha doesn't know about (a cluster, a cloud account, an API) and proposes changes to `topology.yaml`, feeds live numbers to the open viewer, or delivers `malha check` findings. These ship with Malha: `kubernetes`, `porkbun`, `cloudflare`, `umami`, `google`, `posthog`, `discord` and `slack`.
+A plugin reads something Malha doesn't know about (a cluster, a cloud account, an API) and proposes changes to `topology.yaml`, feeds live numbers to the open viewer, reads traffic, or delivers `malha check` findings. These ship with Malha; add one with `malha plugin add <name> infra/topology.yaml`:
+
+| Plugin | What it does | Credentials (read-only) |
+| --- | --- | --- |
+| `kubernetes` | Imports node usage, pods per app and hostnames from your cluster; live CPU, memory and pods in `malha dev`. | Your current `kubectl` context. |
+| `porkbun` | Registrar, expiry and auto-renew for every domain. | `PORKBUN_API_KEY` and `PORKBUN_SECRET_API_KEY` |
+| `cloudflare` | DNS host and plan per domain; DNS records mapped to machines; visitors per domain for sites no tracker measures. | `CLOUDFLARE_API_TOKEN`: Zone, DNS and Analytics read |
+| `umami` | Traffic from Umami, cloud or self-hosted. | An API key or a login per server |
+| `google` | Traffic from Google Analytics 4, and Search Console clicks and queries. | A service account's JSON key |
+| `posthog` | Traffic from PostHog, cloud or self-hosted. | Personal API keys, one per account |
+| `discord`, `slack` | Post what `malha check --notify` finds to a channel. | `DISCORD_WEBHOOK_URL`, `SLACK_WEBHOOK_URL` |
+
+Each also reads its credentials from a file under `~/.config/malha/`; [docs/plugins.md](docs/plugins.md) and [docs/analytics.md](docs/analytics.md) have the details.
 
 ```bash
 malha plugin add kubernetes infra/topology.yaml   # review what it may do; adds it to malha.plugins.json

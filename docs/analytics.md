@@ -1,11 +1,11 @@
 # Traffic
 
-Every site's visitors and search traffic in one place: Umami, Google Analytics 4, PostHog and Google Search Console, read by plugins and shown in the Traffic tab, next to the machines and apps they run on.
+Every site's visitors and search traffic in one place: Umami, Google Analytics 4, PostHog and Google Search Console, with Cloudflare for the sites no tracker measures, read by plugins and shown in the Traffic tab, next to the machines and apps they run on.
 
 ![The Traffic tab for the fictional Acme setup](traffic.png)
 
 ```bash
-malha plugin add umami infra/topology.yaml     # and/or google, posthog
+malha plugin add umami infra/topology.yaml     # and/or google, posthog, cloudflare
 malha analytics detect infra/topology.yaml     # which app loads which tracker; review the diff
 malha analytics refresh infra/topology.yaml    # the last 7, 30 and 90 days
 malha analytics refresh infra/topology.yaml --from 2026-09-01 --to 2026-09-30   # any range
@@ -38,6 +38,22 @@ These ids are not secrets: they are in every page's source. Credentials never go
 - **`malha analytics refresh`** asks each plugin for its sources' numbers over whole days ending yesterday, and the same number of days before, and writes `.malha/analytics.json`. Plugins are untrusted: Malha keeps only the sources it asked for, and well-formed numbers.
 - **The Traffic tab** reads that file. `malha dev` refreshes it when it is older than 6 hours, asking in the page for anything not approved yet; `malha build` embeds it (`--no-analytics` leaves it out).
 
+## Covering every site
+
+1. **Add a plugin for each provider you use**, and `cloudflare` if your domains are on Cloudflare. Approve them ahead of time with `malha plugin allow <name> infra/topology.yaml`, or answer as they ask.
+2. **Run `malha analytics detect`**, and read its notes as well as the diff:
+   - *cannot see the GA4 property for G-…*: add the service account to that property, as Viewer.
+   - *the page sends to G-…, not to this property*: the page reports to a property the service account can't see; share that one.
+   - *no app lists its address* (or *this domain*): a site your providers measure that the topology doesn't have yet. Add it as an app with its `domains`; a site needs no `namespace` or `host` to have traffic.
+   - *is on the pages of A and B*: one tracker on two apps' pages. Add it to the app it belongs to by hand; a source belongs to one app.
+   - *loads Tag Manager … only*: the GA4 property behind it can't be seen from the page; add it by hand.
+3. **Sites with no tracker** get one, or are counted by Cloudflare when their domain is proxied there. The same goes for a site whose provider gives no API (an Umami Cloud plan without API keys): Cloudflare and Search Console still count it.
+4. **Search Console:** add a Domain property for each domain (with DNS on Cloudflare it verifies in one click), and the service account to each one as a Restricted user. A property added today may have no data for its first days.
+5. **Run `malha analytics refresh`**, and read what it flags: pageviews on hostnames no app lists, and projects with no page views.
+6. **Check which source counts** for each app: the first tracker in its list. Reorder the list, or mark one `primary: true`.
+
+Run `detect` again when a site goes up or gets a tracker; it never proposes a source another app already has.
+
 ## Periods
 
 Every refresh fetches the last 7, 30 and 90 days, each against the same number of days just before. `--days 14` adds the last 14 days, which later refreshes keep fetching. `--from 2026-09-01 --to 2026-09-30` fetches a fixed range, up to 366 days and ending by yesterday; the file keeps the eight fetched most recently. `malha check` and the terminal summary use the last 30 days.
@@ -50,7 +66,7 @@ In the Traffic tab, the period picker switches between them. Under `malha dev`, 
 ![A site's page in the Traffic tab, fictional Acme data](traffic-site.png)
 
 - **One site** (click its row): visitors, pageviews, sessions, pages per visit, bounce rate and visit length; visitors or pageviews per day against the previous period, with both values on hover; pages, referrers, countries, devices, browsers and operating systems; for Search Console, clicks, impressions, click rate and position, clicks per day, and the top queries and pages with their own numbers. What other providers count for the same site is shown beside it, not added in.
-- **Links:** each source opens in its own dashboard (Google Analytics, Search Console, PostHog's web analytics, Umami), on the same dates where the dashboard takes them. Malha builds these links from the ids in the topology and the servers in `malha.plugins.json`, never from what a plugin returns.
+- **Links:** each source opens in its own dashboard (Google Analytics, Search Console, PostHog's web analytics, Umami, Cloudflare), on the same dates where the dashboard takes them. Malha builds these links from the ids in the topology and the servers in `malha.plugins.json`, never from what a plugin returns.
 
 ## Setting up each provider
 
@@ -75,7 +91,7 @@ Credentials go in `~/.config/malha/umami.json`, one entry per server, so each se
 
 | Server | Credentials |
 | --- | --- |
-| Umami Cloud | An API key from Settings → API keys. Sent in `x-umami-api-key`. |
+| Umami Cloud | An API key from Settings → API keys, on plans that have them. Sent in `x-umami-api-key`. Without one, see step 3 of [Covering every site](#covering-every-site). |
 | Your own, Umami 3 | An API key from your Umami, sent as a bearer token. Or a login, below. |
 | Your own, Umami 2 | A user that can view the websites: `{ "username": "…", "password": "…" }`. A view-only member of a team that holds the websites is enough; an admin sees every website. |
 
