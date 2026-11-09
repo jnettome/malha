@@ -33,7 +33,7 @@ interface Flow {
   id: string
   kind: LinkKind
   labels: string[]
-  /** Node-level hops, e.g. "w1-under → AWS S3". */
+  /** Node-level hops, e.g. "worker-1 → AWS S3". */
   hops: string[]
 }
 
