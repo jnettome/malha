@@ -1,4 +1,4 @@
-import { mainResult, type AnalyticsCache } from './analytics.ts'
+import { mainResult, searchResult, type AnalyticsCache } from './analytics.ts'
 import type { LiveNode } from './live.ts'
 import type { SecurityScan, Severity } from './security.ts'
 import type { Topology } from './types.ts'
@@ -196,7 +196,7 @@ function traffic(cache: AnalyticsCache | null | undefined, t: Topology, today: D
       else if (d !== undefined && d >= TRAFFIC_DROP.warning)
         out.push(finding('traffic-drop', app, { severity: d >= TRAFFIC_DROP.critical ? 'critical' : 'warning', level: d >= TRAFFIC_DROP.critical ? '80' : '50', title: `${label}: visitors down ${Math.round(d * 100)}%`, detail: `${main.totals?.visitors} in ${cache.days} days, against ${main.previous?.visitors} before (${main.provider})` }))
     }
-    const sc = mine.find((r) => r.provider === 'search-console' && r.ok && r.search)
+    const sc = searchResult(mine)
     const sd = sc ? drop(sc.search!.totals.clicks, sc.search!.previous?.clicks) : undefined
     if (sd !== undefined && sd >= TRAFFIC_DROP.warning)
       out.push(finding('traffic-drop', `${app}/search`, { severity: 'warning', level: sd >= TRAFFIC_DROP.critical ? '80' : '50', title: `${label}: search clicks down ${Math.round(sd * 100)}%`, detail: `${sc!.search!.totals.clicks} in ${cache.days} days, against ${sc!.search!.previous?.clicks} before (Search Console)` }))

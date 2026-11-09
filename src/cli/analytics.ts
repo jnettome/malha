@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { change, customRange, DEFAULT_PERIOD, isRelative, mainResult, MAX_CUSTOM, normalizeAnalytics, pickPeriod, PRESETS, rangeKey, ranges, sourceId, TOP_LISTS, unlistedHosts, type AnalyticsCache, type AnalyticsFile, type AnalyticsRequest, type AnalyticsSource, type DateRange, type Provider, type SourceResult, type TopItem, type Trackers } from '../core/analytics.ts'
+import { change, customRange, DEFAULT_PERIOD, isRelative, mainResult, searchResult, MAX_CUSTOM, normalizeAnalytics, pickPeriod, PRESETS, rangeKey, ranges, sourceId, TOP_LISTS, unlistedHosts, type AnalyticsCache, type AnalyticsFile, type AnalyticsRequest, type AnalyticsSource, type DateRange, type Provider, type SourceResult, type TopItem, type Trackers } from '../core/analytics.ts'
 import { runPlugin, Session, type Asker } from '../plugins/host.ts'
 import { loadPlugins, type Resolved } from '../plugins/project.ts'
 import type { LinkResult } from '../plugins/sdk.ts'
@@ -212,7 +212,7 @@ export function printSummary(cache: AnalyticsCache, apps: { id: string; name: st
   const rows = ids.map((app) => {
     const mine = cache.results.filter((r) => r.app === app)
     const main = mainResult(mine)
-    const sc = mine.find((r) => r.provider === 'search-console' && r.ok)
+    const sc = searchResult(mine)
     return { app, main, sc, failed: mine.filter((r) => !r.ok), measured: mine.some((r) => r.provider !== 'search-console') }
   })
   rows.sort((a, b) => (b.main?.totals?.visitors ?? -1) - (a.main?.totals?.visitors ?? -1))
