@@ -33,7 +33,7 @@
       "required": ["providers"],
       "description": "Present if it exports analytics(ctx, request) (and optionally link(ctx, request)), called by malha analytics refresh and detect.",
       "properties": {
-        "providers": { "type": "array", "minItems": 1, "items": { "enum": ["umami", "ga4", "posthog", "search-console"] } },
+        "providers": { "type": "array", "minItems": 1, "items": { "enum": ["umami", "ga4", "posthog", "search-console", "cloudflare"] } },
         "description": { "type": "string" }
       }
     },

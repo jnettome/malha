@@ -256,7 +256,7 @@
             "additionalProperties": false,
             "required": ["provider", "id"],
             "properties": {
-              "provider": { "enum": ["umami", "ga4", "posthog", "search-console"] },
+              "provider": { "enum": ["umami", "ga4", "posthog", "search-console", "cloudflare"] },
               "id": { "anyOf": [{ "type": "string" }, { "type": "integer" }], "description": "Umami website id, GA4 property id, PostHog project id, or Search Console property (sc-domain:example.com or https://www.example.com/)." },
               "host": { "type": "string", "pattern": "^https?://[^/\\s]+$", "description": "The provider's server, for self-hosted Umami or PostHog." },
               "primary": { "type": "boolean", "description": "The source the Traffic tab counts, when the app has several." }

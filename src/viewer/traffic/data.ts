@@ -17,7 +17,7 @@ export function useAnalytics(): AnalyticsFile | null | undefined {
   return data
 }
 
-export const PROVIDER_LABEL: Record<Provider, string> = { umami: 'Umami', ga4: 'Google Analytics', posthog: 'PostHog', 'search-console': 'Search Console' }
+export const PROVIDER_LABEL: Record<Provider, string> = { umami: 'Umami', ga4: 'Google Analytics', posthog: 'PostHog', 'search-console': 'Search Console', cloudflare: 'Cloudflare' }
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 })
 const full = new Intl.NumberFormat('en')

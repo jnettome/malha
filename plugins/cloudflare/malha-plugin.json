@@ -2,16 +2,30 @@
   "$schema": "../../schema/plugin.schema.json",
   "name": "cloudflare",
   "version": "0.1.0",
-  "description": "Reads the zones and DNS records in a Cloudflare account: DNS host and plan per domain, the hostnames apps are missing, links to the machines the records point at, and records that point at nothing you run.",
+  "description": "Reads the zones, DNS records and traffic in a Cloudflare account: DNS host and plan per domain, the hostnames apps are missing, links to the machines the records point at, records that point at nothing you run, and visitors per domain for the Traffic tab.",
   "main": "index.js",
   "permissions": {
-    "fetch": ["GET https://api.cloudflare.com/client/v4/zones*"],
-    "env": ["CLOUDFLARE_API_TOKEN"],
-    "files": ["~/.config/malha/cloudflare-token", "~/.config/cloudflare/token"],
+    "fetch": [
+      "GET https://api.cloudflare.com/client/v4/zones*",
+      "POST https://api.cloudflare.com/client/v4/graphql"
+    ],
+    "env": [
+      "CLOUDFLARE_API_TOKEN"
+    ],
+    "files": [
+      "~/.config/malha/cloudflare-token",
+      "~/.config/cloudflare/token"
+    ],
     "topology": "propose"
   },
   "commands": {
     "zones": "Propose dns and plan for every zone in the account, and add the domains the file lacks. Never removes one.",
     "records": "Map every DNS record to the node it points at: propose hostnames for apps and HTTP links for nodes, and report records that point at retired machines or unknown addresses"
+  },
+  "analytics": {
+    "providers": [
+      "cloudflare"
+    ],
+    "description": "Unique visitors and page views per domain from Cloudflare's traffic analytics (bots included), for apps no tracker measures; needs Zone \u2192 Analytics \u2192 Read"
   }
 }

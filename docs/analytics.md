@@ -94,6 +94,14 @@ One plugin, one credential: a service account.
 
 The plugin signs its own token with the key and asks only for read-only scopes (`analytics.readonly`, `webmasters.readonly`). Search Console data trails by two or three days, so the last days of a range are low.
 
+### Cloudflare (every proxied domain)
+
+```json
+"cloudflare": { "source": "builtin:cloudflare" }
+```
+
+Cloudflare counts every proxied domain at the edge, so it measures sites no tracker does. Its numbers are unique IP addresses and HTML responses, bots and API calls included, so it counts for an app only when no tracker (Umami, GA4, PostHog) measures it. `malha analytics detect` gives each zone to the app serving its apex (or the one app serving something under it), for apps with no tracker. The token is the one the plugin already reads (`CLOUDFLARE_API_TOKEN` or `~/.config/malha/cloudflare-token`), with **Zone → Analytics → Read** added. A free plan keeps a limited history, so long ranges may fail.
+
 ### PostHog (cloud or self-hosted)
 
 ```json
@@ -108,13 +116,13 @@ One PostHog project often collects several sites, so the plugin counts only `$pa
 
 ## What the numbers mean
 
-| | Umami | GA4 | PostHog |
-| --- | --- | --- | --- |
-| Visitors | visitors | active users | distinct persons |
-| Pageviews | pageviews | screen and page views | `$pageview` events |
-| Sessions | visits | sessions | distinct `$session_id`s |
+| | Umami | GA4 | PostHog | Cloudflare |
+| --- | --- | --- | --- | --- |
+| Visitors | visitors | active users | distinct persons | unique IP addresses, bots included |
+| Pageviews | pageviews | screen and page views | `$pageview` events | HTML responses, bots included |
+| Sessions | visits | sessions | distinct `$session_id`s | — |
 
-Each provider counts its own way, so compare a site with itself over time rather than one provider with another. An app's numbers come from one provider: that of the source marked `primary: true`, or else of its first source that is not Search Console. Every source of that provider is added up, since each usually measures another of the app's sites (a whitelabel with its own PostHog project or GA4 property); the app panel lists them. Sources of other providers are left out of the app's numbers, since they count the same visits again. The headline total adds up each app's visitors, so someone who visits two sites counts twice.
+Each provider counts its own way, so compare a site with itself over time rather than one provider with another. An app's numbers come from one provider: that of the source marked `primary: true`, or else of the first tracker in its list (Umami, GA4 or PostHog), or else Cloudflare. Every source of that provider is added up, since each usually measures another of the app's sites (a whitelabel with its own PostHog project or GA4 property); the app panel lists them. Sources of other providers are left out of the app's numbers, since they count the same visits again. The headline total adds up each app's visitors, so someone who visits two sites counts twice.
 
 `malha analytics refresh` also says when the numbers may be short:
 

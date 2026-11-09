@@ -194,6 +194,10 @@ async function fetchPeriod(file: string, period: number | DateRange, opts: Refre
       for (const s of mine) results.push({ app: s.app, provider, id: String(s.id), host: s.host, primary: s.primary, ok: false, error: (e as Error).message })
     }
   }
+  // In each app's own order, so its first tracker listed is the one that counts (plugins run per
+  // provider, which would otherwise decide it).
+  const order = new Map(sources.map((s, i) => [`${s.app}|${sourceId(s)}`, i]))
+  results.sort((a, b) => (order.get(`${a.app}|${sourceId(a)}`) ?? 0) - (order.get(`${b.app}|${sourceId(b)}`) ?? 0))
   return { key, fetched: new Date().toISOString(), days, range, previous, results }
 }
 
@@ -294,12 +298,18 @@ async function detect(file: string, opts: { yes: boolean; dryRun: boolean }) {
     if (t.posthog.length && !covered.has('posthog')) notes.push(`${t.app}: loads PostHog${posthogWhere(t)}; malha plugin add posthog to read it`)
     if (t.gtm.length && !t.ga4.length) notes.push(`${t.app}: loads Tag Manager ${t.gtm.join(', ')}; the GA4 property behind it can't be seen from the page, so add it by hand`)
   }
-  if (notes.length) console.log(`\n${notes.map((n) => `  ${c.yellow('·')} ${n}`).join('\n')}`)
+  // A website, project or property belongs to one app: never propose one another app has, and ask
+  // when two apps claim the same one (a tracker shared by two sites).
+  const owner = new Map((data.apps ?? []).flatMap((a) => (a.analytics ?? []).map((s) => [sourceId(s), a.id] as const)))
+  const claims = new Map<string, Set<string>>()
+  for (const [app, list] of proposed) for (const s of list) claims.set(sourceId(s), (claims.get(sourceId(s)) ?? new Set()).add(app))
+  for (const [id, apps] of claims) if (apps.size > 1 && !owner.has(id)) notes.push(`${id} is on the pages of ${[...apps].join(' and ')}; add it to the app it belongs to by hand`)
   const changes = []
   for (const app of data.apps ?? []) {
-    const add = (proposed.get(app.id) ?? []).filter((s, i, all) => !(app.analytics ?? []).some((x) => sourceId(x) === sourceId(s)) && all.findIndex((y) => sourceId(y) === sourceId(s)) === i)
+    const add = (proposed.get(app.id) ?? []).filter((s, i, all) => !owner.has(sourceId(s)) && claims.get(sourceId(s))!.size === 1 && all.findIndex((y) => sourceId(y) === sourceId(s)) === i)
     if (add.length) changes.push({ update: 'apps', id: app.id, set: { analytics: [...(app.analytics ?? []), ...add] }, why: add.map((s) => s.provider).join(', ') })
   }
+  if (notes.length) console.log(`\n${notes.map((n) => `  ${c.yellow('·')} ${n}`).join('\n')}`)
   if (!changes.length) return console.log(`\n  Nothing new to add to ${display(file)}.`)
   await proposeChanges(file, 'malha analytics detect', changes, opts)
 }

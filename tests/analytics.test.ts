@@ -39,7 +39,7 @@ const req = (sources: AnalyticsRequest['sources'], days = 3): AnalyticsRequest =
 
 afterEach(() => {
   vi.unstubAllGlobals()
-  for (const k of ['UMAMI_USERNAME', 'UMAMI_PASSWORD', 'UMAMI_API_KEY', 'POSTHOG_PERSONAL_API_KEY', 'GOOGLE_SERVICE_ACCOUNT']) delete process.env[k]
+  for (const k of ['UMAMI_USERNAME', 'UMAMI_PASSWORD', 'UMAMI_API_KEY', 'POSTHOG_PERSONAL_API_KEY', 'GOOGLE_SERVICE_ACCOUNT', 'CLOUDFLARE_API_TOKEN']) delete process.env[k]
   process.env.HOME = HOME
 })
 
@@ -491,6 +491,18 @@ describe('malha analytics', () => {
     expect(after.apps!.find((a) => a.id === 'status')!.analytics).toEqual([{ provider: 'umami', id: UUID }])
   })
 
+  it('detect never proposes a source another app already has', async () => {
+    const file = await project()
+    const { writeFileSync } = await import('node:fs')
+    // The website moves to the back office by hand; the status page still loads its script.
+    const text = readFileSync(file, 'utf8').replace(`    analytics:\n      - { provider: umami, id: ${UUID} }\n`, '')
+    writeFileSync(file, text.replace('    analytics:\n      - { provider: posthog, id: 4242 }\n', `    analytics:\n      - { provider: posthog, id: 4242 }\n      - { provider: umami, id: ${UUID} }\n`))
+    umamiServer()
+    const before = readFileSync(file, 'utf8')
+    await analytics(file, 'detect', { days: 30, timezone: 'UTC', yes: true, dryRun: false })
+    expect(readFileSync(file, 'utf8')).toBe(before)
+  })
+
   it('refresh fetches the last 7, 30 and 90 days, says which sources have no plugin, and notes each server', async () => {
     const file = await project()
     umamiServer()
@@ -503,6 +515,8 @@ describe('malha analytics', () => {
     expect(month.results.find((r) => r.provider === 'umami')).toMatchObject({ app: 'status', ok: true, totals: { visitors: 40 }, host: 'https://u.acme.example' })
     expect(month.results.find((r) => r.provider === 'ga4')).toMatchObject({ ok: false, error: expect.stringContaining('malha plugin add google') })
     expect(month.results.find((r) => r.provider === 'posthog')).toMatchObject({ ok: false, error: expect.stringContaining('malha plugin add posthog') })
+    // In the topology's order, whatever order the plugins ran in.
+    expect(month.results.map((r) => `${r.app}:${r.provider}`)).toEqual(['shop:ga4', 'shop:search-console', 'admin:posthog', 'status:umami'])
   })
 
   it('refresh adds a fixed range beside the others, and keeps the latest few', async () => {
@@ -672,5 +686,65 @@ describe('the dev server fetches a range only for its own page', () => {
       api.close()
       server.close()
     }
+  })
+})
+
+describe('the cloudflare plugin', () => {
+  const zonesList = (zones: { id: string; name: string }[]) => json({ success: true, result: zones.map((z) => ({ ...z, status: 'active', plan: { legacy_id: 'free' } })), result_info: { total_pages: 1 } })
+
+  it('reads each zone’s visitors and page views, day by day, against the period before', async () => {
+    process.env.CLOUDFLARE_API_TOKEN = 'cf'
+    const { file } = scratch()
+    const asked: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      if (url.includes('/zones')) return zonesList([{ id: 'z1', name: 'acme-status.example' }])
+      const body = JSON.parse(String(init.body))
+      asked.push(body.variables)
+      const day = (date: string, uniques: number, pageViews: number) => ({ dimensions: { date }, uniq: { uniques }, sum: { pageViews } })
+      return json({ data: { viewer: { zones: [{ days: [day('2026-11-02', 40, 90)], before: [day('2026-10-30', 20, 50)], now: [{ uniq: { uniques: 100 }, sum: { pageViews: 300 } }], then: [{ uniq: { uniques: 60 }, sum: { pageViews: 200 } }] }] } } })
+    })
+    const r = (await runPlugin({ file, plugin: resolved('cloudflare'), run: { kind: 'analytics' }, input: req([{ app: 'status', provider: 'cloudflare', id: 'acme-status.example', hostnames: [] }]), asker: yes })) as { results: SourceResult[] }
+    expect(asked[0]).toMatchObject({ zone: 'z1', from: '2026-11-01', to: '2026-11-03' })
+    expect(r.results[0]).toMatchObject({ ok: true, totals: { visitors: 100, pageviews: 300 }, previous: { visitors: 60, pageviews: 200 } })
+    expect(r.results[0].series).toEqual([
+      { date: '2026-11-01', visitors: 0, pageviews: 0 },
+      { date: '2026-11-02', visitors: 40, pageviews: 90 },
+      { date: '2026-11-03', visitors: 0, pageviews: 0 },
+    ])
+    delete process.env.CLOUDFLARE_API_TOKEN
+  })
+
+  it('says when the token cannot read analytics', async () => {
+    process.env.CLOUDFLARE_API_TOKEN = 'cf'
+    const { file } = scratch()
+    vi.stubGlobal('fetch', async (url: string) => (url.includes('/zones') ? zonesList([{ id: 'z1', name: 'acme.example' }]) : json({ data: null, errors: [{ message: 'not authorized for that account' }] })))
+    const r = (await runPlugin({ file, plugin: resolved('cloudflare'), run: { kind: 'analytics' }, input: req([{ app: 'shop', provider: 'cloudflare', id: 'acme.example', hostnames: [] }]), asker: yes })) as { results: SourceResult[] }
+    expect(r.results[0]).toMatchObject({ ok: false, error: 'the token cannot read analytics: give it Zone → Analytics → Read' })
+    delete process.env.CLOUDFLARE_API_TOKEN
+  })
+
+  it('gives each zone to the app serving it, only where nothing else measures that app', async () => {
+    process.env.CLOUDFLARE_API_TOKEN = 'cf'
+    const { file } = scratch()
+    vi.stubGlobal('fetch', async () => zonesList([{ id: 'z1', name: 'acme.example' }, { id: 'z2', name: 'acme-blog.example' }, { id: 'z3', name: 'gone.example' }, { id: 'z4', name: 'acme-status.example' }]))
+    const none = { umami: [], ga4: [], gtm: [], posthog: [] }
+    const trackers = [
+      // Shop has GA4 in the topology, the status page Umami; the blog has nothing that counts visits.
+      { app: 'shop', hostnames: ['acme.example', 'www.acme.example'], ...none },
+      { app: 'status', hostnames: ['status.acme-status.example'], ...none },
+      { app: 'blog', hostnames: ['www.acme-blog.example'], ...none },
+    ]
+    const r = (await runPlugin({ file, plugin: resolved('cloudflare'), run: { kind: 'link' }, input: { trackers }, asker: yes })) as LinkResult
+    expect(r.sources).toEqual([{ app: 'blog', source: { provider: 'cloudflare', id: 'acme-blog.example' } }])
+    expect(r.notes).toEqual(['zone gone.example: no app lists it'])
+    delete process.env.CLOUDFLARE_API_TOKEN
+  })
+
+  it('counts a tracker before Cloudflare, and Cloudflare when nothing else measures', () => {
+    const t = (provider: SourceResult['provider'], visitors: number): SourceResult => ({ app: 'shop', provider, id: provider, ok: true, totals: { visitors } })
+    expect(mainResult([t('cloudflare', 900), t('posthog', 100)])?.provider).toBe('posthog')
+    expect(mainResult([t('cloudflare', 900)])?.provider).toBe('cloudflare')
+    expect(panelUrl({ provider: 'cloudflare', id: 'Acme.example' })).toBe('https://dash.cloudflare.com/?to=/:account/acme.example/analytics/traffic')
+    expect(panelUrl({ provider: 'cloudflare', id: 'acme.example/../x' })).toBeUndefined()
   })
 })

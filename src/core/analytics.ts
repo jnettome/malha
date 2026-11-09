@@ -2,8 +2,11 @@
 // Plugins fetch it; `malha analytics refresh` writes .malha/analytics.json; the Traffic tab and
 // `malha check` read it.
 
-export type Provider = 'umami' | 'ga4' | 'posthog' | 'search-console'
-export const PROVIDERS: Provider[] = ['umami', 'ga4', 'posthog', 'search-console']
+export type Provider = 'umami' | 'ga4' | 'posthog' | 'search-console' | 'cloudflare'
+export const PROVIDERS: Provider[] = ['umami', 'ga4', 'posthog', 'search-console', 'cloudflare']
+/** Providers that measure visits on the page. Cloudflare counts requests at the edge, bots
+ *  included, so it is an app's main source only when no tracker measures it. */
+export const TRACKERS: Provider[] = ['umami', 'ga4', 'posthog']
 
 /** One analytics source of an app, as topology.yaml lists it under `analytics`. */
 export interface AnalyticsSource {
@@ -182,6 +185,9 @@ export function panelUrl(s: { provider: Provider; id: string | number; host?: st
       if (!/^[0-9a-f-]{36}$/i.test(id) || !host) return undefined
       return `${host === 'https://api.umami.is' ? 'https://cloud.umami.is' : host}/websites/${id}`
     }
+    case 'cloudflare':
+      // Cloudflare's own redirect picks the account; the zone goes by name.
+      return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(id) ? `https://dash.cloudflare.com/?to=/:account/${id.toLowerCase()}/analytics/traffic` : undefined
   }
 }
 
@@ -206,12 +212,12 @@ export interface Trackers {
 export const sourceId = (s: { provider: string; id: string | number }) => `${s.provider}:${s.id}`
 
 /** An app's traffic, from its main provider: the provider of its `primary` source, else of its first
- *  traffic source. Every source of that provider is added up, since each usually measures another of
+ *  tracker (Umami, GA4, PostHog), else Cloudflare. Every source of that provider is added up, since each usually measures another of
  *  the app's sites (a whitelabel with its own project); other providers are left out, since they
  *  measure the same visits again. `parts` lists the sources when there are several. */
 export function mainResult(results: SourceResult[]): MainResult | undefined {
   const traffic = results.filter((r) => r.provider !== 'search-console' && r.ok && r.totals)
-  const first = traffic.find((r) => r.primary) ?? traffic[0]
+  const first = traffic.find((r) => r.primary) ?? traffic.find((r) => TRACKERS.includes(r.provider)) ?? traffic[0]
   if (!first) return undefined
   const parts = traffic.filter((r) => r.provider === first.provider)
   if (parts.length === 1) return first

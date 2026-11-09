@@ -212,7 +212,10 @@ export default {
       if (owner && !withGa4.has(owner.app) && !owner.ga4.length) {
         sources.push({ app: owner.app, source: { provider: 'ga4', id } })
         withGa4.add(owner.app)
-      } else notes.push(`GA4 property ${p.name} (${id}${p.uris.length ? `, ${p.uris.join(', ')}` : ''}): ${owner ? `${owner.app} already has its GA4 source; add it by hand if this one is right` : 'no app lists its address'}`)
+      } else {
+        const why = !owner ? 'no app lists its address' : withGa4.has(owner.app) ? `${owner.app} already has a GA4 source; add this one by hand if it belongs there too` : `${owner.app}'s page sends to ${owner.ga4.join(', ')}, not to this property; share that one with ${key.client_email}, or add this one by hand`
+        notes.push(`GA4 property ${p.name} (${id}${p.uris.length ? `, ${p.uris.join(', ')}` : ''}): ${why}`)
+      }
     }
 
     // Search Console: each property goes to the app that owns its domain (or the URL's host).
