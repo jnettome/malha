@@ -114,7 +114,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - run: npm install -g malha
+      - run: npm install -g @malha/cli
       - uses: actions/cache/restore@v6
         with:
           path: infra/.malha/check-state.json

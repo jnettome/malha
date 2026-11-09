@@ -27,8 +27,9 @@ jobs:
       - run: npx playwright install --with-deps chromium && npm run e2e
       - name: npm publish (unless this version is already on npm, as the first one is)
         run: |
-          if npm view "malha@${GITHUB_REF_NAME#v}" version > /dev/null 2>&1; then
-            echo "malha@${GITHUB_REF_NAME#v} is already on npm; not publishing it again."
+          name="$(node -p "require('./package.json').name")"
+          if npm view "$name@${GITHUB_REF_NAME#v}" version > /dev/null 2>&1; then
+            echo "$name@${GITHUB_REF_NAME#v} is already on npm; not publishing it again."
           else
             npm publish
           fi
