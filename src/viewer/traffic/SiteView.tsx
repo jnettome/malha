@@ -196,7 +196,7 @@ export function SiteView({ file, data, app, picked, onPick }: { file: AnalyticsF
             <Tile label="Clicks" now={s.totals.clicks} before={s.previous?.clicks} />
             <Tile label="Impressions" now={s.totals.impressions} before={s.previous?.impressions} warn={false} />
             <Tile label="Click rate" now={s.totals.ctr} shown={pct(s.totals.ctr)} note={s.previous ? `${pct(s.previous.ctr)} before` : ''} />
-            <Tile label="Average position" now={s.totals.position} shown={s.totals.position.toFixed(1)} note={s.previous ? `${s.previous.position.toFixed(1)} before; lower is better` : ''} />
+            <Tile label="Average position" now={s.totals.position} shown={s.totals.impressions ? s.totals.position.toFixed(1) : '—'} note={s.previous?.impressions ? `${s.previous.position.toFixed(1)} before; lower is better` : ''} />
           </div>
           {s.series.length > 1 && (
             <section className="tpanel tpanel--chart">

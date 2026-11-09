@@ -331,7 +331,7 @@ function AppTraffic({ app }: { app: App }) {
       )}
       {s && (
         <>
-          <Spec rows={[['Search', `${fmtFull(s.totals.clicks)} clicks, ${fmtFull(s.totals.impressions)} impressions, position ${s.totals.position.toFixed(1)}`]]} />
+          <Spec rows={[['Search', `${fmtFull(s.totals.clicks)} clicks, ${fmtFull(s.totals.impressions)} impressions${s.totals.impressions ? `, position ${s.totals.position.toFixed(1)}` : ''}`]]} />
           <BarList items={s.queries.slice(0, 5).map((q) => ({ key: q.key, value: q.clicks }))} unit="clicks" label="Search queries" />
         </>
       )}
