@@ -171,7 +171,8 @@ export function createApi(file: string, opts: ApiOptions = {}): Api {
       json(res, 404, { error: 'no such endpoint' })
       return true
     },
-    injectToken: (html) => html.replace('</head>', `<meta name="malha-token" content="${token}">\n</head>`),
+    // Without plugins there is nothing to answer or fetch, so the page gets no token to ask with.
+    injectToken: (html) => (live ? html.replace('</head>', `<meta name="malha-token" content="${token}">\n</head>`) : html),
     close() {
       clearTimeout(timer)
       live?.close()

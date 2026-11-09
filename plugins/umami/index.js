@@ -184,6 +184,7 @@ export default {
           sources.push({ app: owners[0].app, source: { provider: 'umami', id: w.id, ...(host !== hosts[0] ? { host } : {}) } })
           found.add(w.id)
         } else if (owners.length > 1) notes.push(`website ${w.name ?? w.domain} on ${host}: ${owners.map((t) => t.app).join(', ')} all serve ${w.domain}; add it to the right app by hand`)
+        else notes.push(`website ${w.name ?? w.domain} on ${host} (${w.domain}): no app lists this domain`)
       }
     }
     return { sources, notes }

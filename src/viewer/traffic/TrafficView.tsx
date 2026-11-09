@@ -1,8 +1,9 @@
-import { isRelative, pickPeriod, type AnalyticsCache } from '../../core/analytics.ts'
+import { useState } from 'react'
+import { isRelative, pickPeriod, type AnalyticsCache, type DateRange } from '../../core/analytics.ts'
 import { model } from '../model/model.ts'
 import { useUi } from '../ui/state.tsx'
 import { BarList, CompareChart, Sparkline } from './charts.tsx'
-import { addSeries, fmt, fmtFull, mergeTop, tidy, periodLabel, previousLabel, PROVIDER_LABEL, shortDate, siteRows, useAnalytics, type SiteRow } from './data.ts'
+import { addSeries, canFetchRanges, fmt, fmtFull, mergeTop, tidy, periodLabel, previousLabel, PROVIDER_LABEL, shortDate, siteRows, useAnalytics, type SiteRow } from './data.ts'
 import { Delta, Tile } from './parts.tsx'
 import { PeriodPicker } from './PeriodPicker.tsx'
 import { SiteView } from './SiteView.tsx'
@@ -55,6 +56,7 @@ const inPeriod = (p: AnalyticsCache) => (isRelative(p.key) ? `in the last ${p.da
 export function TrafficView() {
   const ui = useUi()
   const file = useAnalytics()
+  const [picked, setPicked] = useState<DateRange>()
   if (file === undefined) return <div className="traffic" />
   const data = pickPeriod(file, ui.traffic.period)
   if (!file || !data) {
@@ -71,7 +73,7 @@ export function TrafficView() {
       </div>
     )
   }
-  if (ui.traffic.app) return <SiteView file={file} data={data} app={ui.traffic.app} />
+  if (ui.traffic.app) return <SiteView file={file} data={data} app={ui.traffic.app} picked={picked} onPick={setPicked} />
 
   const rows = siteRows(data)
   const sum = (pick: (r: SiteRow) => number | undefined) => rows.reduce((n, r) => n + (pick(r) ?? 0), 0)
@@ -105,7 +107,7 @@ export function TrafficView() {
         </p>
       </div>
 
-      <PeriodPicker file={file} current={data} />
+      <PeriodPicker file={file} current={data} selection={picked} />
 
       <div className="tiles">
         <Tile label="Visitors" now={visitors} before={sum((r) => r.main?.previous?.visitors)} />
@@ -117,7 +119,7 @@ export function TrafficView() {
       {daily.length > 1 && (
         <section className="tpanel tpanel--chart">
           <h2 className="eyebrow">Visitors per day, all sites</h2>
-          <CompareChart now={daily} before={before} unit="visitors" labels={[periodLabel(data), previousLabel(data)]} totals={[visitors, before ? sum((r) => r.main?.previous?.visitors) : undefined]} />
+          <CompareChart now={daily} before={before} unit="visitors" labels={[periodLabel(data), previousLabel(data)]} totals={[visitors, before ? sum((r) => r.main?.previous?.visitors) : undefined]} onSelect={canFetchRanges() ? (from, to) => setPicked({ from, to }) : undefined} />
         </section>
       )}
 

@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { mainResult, panelUrl, sourceId, type AnalyticsCache, type AnalyticsFile, type SearchQuery, type SourceResult, type TopList } from '../../core/analytics.ts'
+import { mainResult, panelUrl, sourceId, type AnalyticsCache, type AnalyticsFile, type DateRange, type SearchQuery, type SourceResult, type TopList } from '../../core/analytics.ts'
 import { model } from '../model/model.ts'
 import { useUi } from '../ui/state.tsx'
 import { BarList, CompareChart } from './charts.tsx'
-import { duration, fmtFull, pct, tidy, periodLabel, previousLabel, PROVIDER_LABEL, shortDate } from './data.ts'
+import { canFetchRanges, duration, fmtFull, pct, tidy, periodLabel, previousLabel, PROVIDER_LABEL, shortDate } from './data.ts'
 import { Tile } from './parts.tsx'
 import { PeriodPicker } from './PeriodPicker.tsx'
 
@@ -60,7 +60,8 @@ function SearchTable({ rows, label }: { rows: SearchQuery[]; label: string }) {
 }
 
 /** One site's traffic: every number Malha has for it in the period, against the period before. */
-export function SiteView({ file, data, app }: { file: AnalyticsFile; data: AnalyticsCache; app: string }) {
+export function SiteView({ file, data, app, picked, onPick }: { file: AnalyticsFile; data: AnalyticsCache; app: string; picked?: DateRange; onPick: (r: DateRange) => void }) {
+  const select = canFetchRanges() ? (from: string, to: string) => onPick({ from, to }) : undefined
   const ui = useUi()
   const [metric, setMetric] = useState<'visitors' | 'pageviews'>('visitors')
   const name = model.appById.get(app)?.name ?? app
@@ -108,7 +109,7 @@ export function SiteView({ file, data, app }: { file: AnalyticsFile; data: Analy
         </div>
       </div>
 
-      <PeriodPicker file={file} current={data} />
+      <PeriodPicker file={file} current={data} selection={picked} />
 
       {!mine.length && <p className="callout callout--notice">{name} has no analytics source in this period.</p>}
 
@@ -140,6 +141,7 @@ export function SiteView({ file, data, app }: { file: AnalyticsFile; data: Analy
                 before={main.previousSeries?.map((pt) => ({ date: pt.date, value: pick(pt) }))}
                 unit={metric}
                 labels={[periodLabel(data), previousLabel(data)]}
+                onSelect={select}
                 totals={metric === 'visitors' ? [t.visitors, p?.visitors] : [t.pageviews, p?.pageviews]}
               />
             </section>
@@ -202,6 +204,7 @@ export function SiteView({ file, data, app }: { file: AnalyticsFile; data: Analy
                 before={s.previousSeries?.map((pt) => ({ date: pt.date, value: pt.clicks }))}
                 unit="clicks"
                 labels={[periodLabel(data), previousLabel(data)]}
+                onSelect={select}
                 totals={[s.totals.clicks, s.previous?.clicks]}
               />
             </section>

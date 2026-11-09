@@ -89,8 +89,26 @@ export function SeriesChart({ points, unit, height = 120 }: { points: Point[]; u
 
 /** This period's daily values against the previous period's, day by day: a solid line in the chart
  *  hue and a dashed neutral one, on one axis, with a legend and a crosshair that reads both. */
-export function CompareChart({ now, before, unit, labels, totals, height = 180 }: { now: Point[]; before?: Point[]; unit: string; labels: [string, string]; totals?: [number | undefined, number | undefined]; height?: number }) {
+export function CompareChart({
+  now,
+  before,
+  unit,
+  labels,
+  totals,
+  height = 180,
+  onSelect,
+}: {
+  now: Point[]
+  before?: Point[]
+  unit: string
+  labels: [string, string]
+  totals?: [number | undefined, number | undefined]
+  height?: number
+  /** Drag across the chart to pick the days between. */
+  onSelect?: (from: string, to: string) => void
+}) {
   const [hover, setHover] = useState<number | null>(null)
+  const [drag, setDrag] = useState<number | null>(null)
   const W = 600
   const prev = before?.length ? before.slice(0, now.length) : undefined
   const top = Math.max(1, ...now.map((p) => p.value), ...(prev ?? []).map((p) => p.value))
@@ -115,8 +133,38 @@ export function CompareChart({ now, before, unit, labels, totals, height = 180 }
             <i className="chart__key chart__key--before" /> {labels[1]} · {fmtFull(total(prev, 1))}
           </span>
         )}
+        {onSelect && <span className="chart__hint">Drag across the chart to look at those days</span>}
       </div>
-      <div className="chart__plot" style={{ height }} onMouseMove={(e) => setHover(indexAt(e, now.length))} onMouseLeave={() => setHover(null)}>
+      <div
+        className={`chart__plot${onSelect ? ' chart__plot--brush' : ''}`}
+        style={{ height }}
+        onMouseMove={(e) => setHover(indexAt(e, now.length))}
+        onMouseLeave={() => {
+          setHover(null)
+          setDrag(null)
+        }}
+        onMouseDown={
+          onSelect
+            ? (e) => {
+                e.preventDefault()
+                setDrag(indexAt(e, now.length))
+              }
+            : undefined
+        }
+        onMouseUp={
+          onSelect
+            ? (e) => {
+                if (drag === null) return
+                const i = indexAt(e, now.length)
+                setDrag(null)
+                if (i !== drag) onSelect(now[Math.min(drag, i)].date, now[Math.max(drag, i)].date)
+              }
+            : undefined
+        }
+      >
+        {drag !== null && hover !== null && (
+          <span className="chart__band" style={{ left: `${(cur.x(Math.min(drag, hover)) / W) * 100}%`, width: `${((cur.x(Math.max(drag, hover)) - cur.x(Math.min(drag, hover))) / W) * 100}%` }} />
+        )}
         <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" role="img" aria-label={`${describe(now, unit)}${prev ? `; ${fmtFull(total(prev, 1))} the period before` : ''}`}>
           <line x1="0" x2={W} y1={cur.y(top)} y2={cur.y(top)} className="chart__grid" />
           <line x1="0" x2={W} y1={height - 4} y2={height - 4} className="chart__base" />
@@ -130,13 +178,21 @@ export function CompareChart({ now, before, unit, labels, totals, height = 180 }
           <>
             <i className="chart__dot-html" style={{ left: `${(cur.x(hover!) / W) * 100}%`, top: `${(cur.y(p.value) / height) * 100}%` }} />
             <span className="chart__tip chart__tip--two" style={{ left: `${(cur.x(hover!) / W) * 100}%` }}>
-              <span>
-                {shortDate(p.date)} · {fmtFull(p.value)} {unit}
-              </span>
-              {b && (
-                <span className="chart__tip-before">
-                  {shortDate(b.date)} · {fmtFull(b.value)}
+              {drag !== null && drag !== hover ? (
+                <span>
+                  {shortDate(now[Math.min(drag, hover!)].date)} – {shortDate(now[Math.max(drag, hover!)].date)} · {Math.abs(hover! - drag) + 1} days
                 </span>
+              ) : (
+                <>
+                  <span>
+                    {shortDate(p.date)} · {fmtFull(p.value)} {unit}
+                  </span>
+                  {b && (
+                    <span className="chart__tip-before">
+                      {shortDate(b.date)} · {fmtFull(b.value)}
+                    </span>
+                  )}
+                </>
               )}
             </span>
           </>

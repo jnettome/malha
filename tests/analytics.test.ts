@@ -271,7 +271,7 @@ describe('the posthog plugin finds projects', () => {
       if (u.pathname === '/api/projects/') return json({ results: [{ id: 1, api_token: 'phc_current' }] })
       if (u.pathname === '/api/organizations/') return json({ results: [{ id: 'org-a', name: 'A' }, { id: 'org-b', name: 'B' }] })
       if (u.pathname === '/api/organizations/org-a/projects/') return json({ results: [{ id: 1, api_token: 'phc_current' }] })
-      if (u.pathname === '/api/organizations/org-b/projects/') return json({ results: [{ id: 77, api_token: KEY }] })
+      if (u.pathname === '/api/organizations/org-b/projects/') return json({ results: [{ id: 77, api_token: KEY }, { id: 88, name: 'Status page', api_token: 'phc_status', app_urls: ['https://status.acme-status.example'] }, { id: 99, name: 'Old', api_token: 'phc_old', app_urls: ['https://gone.example'] }] })
       return json({}, 404)
     })
     const none = { umami: [], ga4: [], gtm: [] }
@@ -279,10 +279,19 @@ describe('the posthog plugin finds projects', () => {
       // Sends through its own domain, so the page doesn't say which PostHog it is.
       { app: 'admin', hostnames: ['admin.acme.example'], ...none, posthog: [{ key: KEY, host: 'https://admin.acme.example' }] },
       { app: 'shop', hostnames: ['acme.example'], ...none, posthog: [{ key: `phc_${'z'.repeat(43)}` }] },
+      // No page answered, but its project lists the address.
+      { app: 'status', hostnames: ['status.acme-status.example'], ...none, posthog: [] },
     ]
     const r = (await runPlugin({ file, plugin: resolved('posthog', { hosts: ['https://us.posthog.com'] }), run: { kind: 'link' }, input: { trackers }, asker: yes })) as LinkResult
-    expect(r.sources).toEqual([{ app: 'admin', source: { provider: 'posthog', id: 77 } }])
-    expect(r.notes).toEqual([`shop: no project with the key phc_zzzzzz… on https://us.posthog.com`])
+    expect(r.sources).toEqual([
+      { app: 'admin', source: { provider: 'posthog', id: 77 } },
+      { app: 'status', source: { provider: 'posthog', id: 88 } },
+    ])
+    expect(r.notes).toEqual([
+      'shop: no project with the key phc_zzzzzz… on https://us.posthog.com',
+      'project 1 (1) on https://us.posthog.com, key 1: no app loads its key, and it lists no addresses',
+      'project Old (99) on https://us.posthog.com, key 1: no app lists gone.example',
+    ])
   })
 
   it('says what a project collects when it has no pageviews', async () => {
@@ -419,8 +428,12 @@ describe('the google plugin', () => {
     const { file } = scratch()
     vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
       if (url === 'https://oauth2.googleapis.com/token') return token(String(init.body))
-      if (url.includes('/accountSummaries')) return json({ accountSummaries: [{ propertySummaries: [{ property: 'properties/312345678' }] }] })
-      if (url.includes('/dataStreams')) return json({ dataStreams: [{ webStreamData: { measurementId: 'G-ABCDEF1234' } }] })
+      if (url.includes('/accountSummaries'))
+        return json({ accountSummaries: [{ propertySummaries: [{ property: 'properties/312345678' }, { property: 'properties/400', displayName: 'Status' }, { property: 'properties/500', displayName: 'Old site' }] }] })
+      if (url.includes('properties/312345678/dataStreams')) return json({ dataStreams: [{ webStreamData: { measurementId: 'G-ABCDEF1234', defaultUri: 'https://acme.example' } }] })
+      // No page shows these two: one by its stream's address, the other for no app.
+      if (url.includes('properties/400/dataStreams')) return json({ dataStreams: [{ webStreamData: { measurementId: 'G-STATUS0001', defaultUri: 'https://status.acme-status.example' } }] })
+      if (url.includes('properties/500/dataStreams')) return json({ dataStreams: [{ webStreamData: { measurementId: 'G-OLD0000001', defaultUri: 'https://gone.example' } }] })
       if (url.endsWith('/webmasters/v3/sites')) return json({ siteEntry: [{ siteUrl: 'sc-domain:acme.example', permissionLevel: 'siteRestrictedUser' }, { siteUrl: 'https://other.example/', permissionLevel: 'siteOwner' }] })
       return json({}, 404)
     })
@@ -429,9 +442,14 @@ describe('the google plugin', () => {
     const r = (await runPlugin({ file, plugin: resolved('google'), run: { kind: 'link' }, input: { trackers }, asker: yes })) as LinkResult
     expect(r.sources).toEqual([
       { app: 'shop', source: { provider: 'ga4', id: '312345678' } },
+      { app: 'status', source: { provider: 'ga4', id: '400' } },
       { app: 'shop', source: { provider: 'search-console', id: 'sc-domain:acme.example' } },
     ])
-    expect(r.notes?.join('\n')).toContain('G-NOTVISIBLE')
+    expect(r.notes).toEqual([
+      'api: malha@acme.iam.gserviceaccount.com cannot see the GA4 property for G-NOTVISIBLE; add it as a Viewer',
+      'GA4 property Old site (500, https://gone.example): no app lists its address',
+      'Search Console https://other.example/: no app lists this domain',
+    ])
   })
 })
 
@@ -622,11 +640,19 @@ describe('dashboard links', () => {
 })
 
 describe('the dev server fetches a range only for its own page', () => {
-  it('refuses other callers, bad bodies, and a server without plugins', async () => {
-    const { createServer } = await import('node:http')
+  it('gives no token to ask with when plugins are off', async () => {
     const { createApi } = await import('../src/cli/api.ts')
     const { file } = scratch()
     const api = createApi(file, { plugins: false, loopback: true, log: () => undefined })
+    expect(api.injectToken('<head></head>')).toBe('<head></head>')
+    api.close()
+  })
+
+  it('refuses other callers, bad bodies and bad dates, and says when no plugin reads traffic', async () => {
+    const { createServer } = await import('node:http')
+    const { createApi } = await import('../src/cli/api.ts')
+    const { file } = scratch()
+    const api = createApi(file, { plugins: true, loopback: true, log: () => undefined })
     const server = createServer((rq, rs) => api.handle(rq, rs) || rs.writeHead(404).end())
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r))
     const port = (server.address() as import('node:net').AddressInfo).port
@@ -638,6 +664,9 @@ describe('the dev server fetches a range only for its own page', () => {
       expect(await post({ ...good, 'x-malha-token': 'nope' }, { from: '2026-09-01', to: '2026-09-30' })).toBe(403)
       expect(await post({ ...good, origin: 'http://evil.test' }, { from: '2026-09-01', to: '2026-09-30' })).toBe(403)
       expect(await post(good, { from: 20260901 })).toBe(400)
+      expect(await post(good, { from: '2026-09-30', to: '2026-09-01' })).toBe(400)
+      expect(await post(good, { from: '2026-09-01', to: '2099-09-30' })).toBe(400)
+      // The Acme copy lists sources but adds no analytics plugin.
       expect(await post(good, { from: '2026-09-01', to: '2026-09-30' })).toBe(409)
     } finally {
       api.close()

@@ -171,6 +171,25 @@ test('the Traffic tab shows every site, its trend, and what could not be read', 
     await expect(page.locator('.tpanel--chart h2').first()).toHaveText('Pageviews per day')
     expect(await overflowing(page)).toEqual([])
 
+    // Dates from the calendar, or dragged across the chart; the plugin-less copy can't fetch them.
+    await page.getByRole('button', { name: 'Pick dates' }).click()
+    await page.getByRole('button', { name: 'Last month' }).click()
+    await expect(page.locator('.period__summary')).toHaveText(/ – .* · \d+ days, against the \d+ before/)
+    await expect(page.locator('.cal__day.is-edge')).toHaveCount(2)
+    expect(await overflowing(page)).toEqual([])
+    await page.locator('.period__foot .btn').click()
+    await expect(page.locator('.period__summary')).toHaveText(/no analytics plugin/)
+    await page.getByRole('button', { name: 'Pick dates' }).click()
+    if (!isMobile) {
+      const plot = (await page.locator('.chart--compare .chart__plot').first().boundingBox())!
+      await page.mouse.move(plot.x + plot.width * 0.2, plot.y + plot.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(plot.x + plot.width * 0.5, plot.y + plot.height / 2, { steps: 4 })
+      await expect(page.locator('.chart__band')).toBeVisible()
+      await page.mouse.up()
+      await expect(page.locator('.period__summary')).toHaveText(/^\w{3} \d+ – \w{3} \d+, 20\d\d · \d+ days/)
+    }
+
     // Back to every site, and the app panel links to the page too.
     await page.goBack()
     await expect(page.locator('.traffic h1')).toHaveText(/in the last 90 days/)
@@ -178,7 +197,8 @@ test('the Traffic tab shows every site, its trend, and what could not be read', 
     await page.getByRole('button', { name: 'Show its machines' }).click()
     await expect(page.locator('.insp__section', { hasText: 'Traffic · last 90 days' })).toContainText('Umami')
     await expect(page.locator('.insp__section a.tlink')).toHaveAttribute('href', 'https://umami.acme.example/websites/7b8f1c2e-5a44-4d1e-9c3a-2f6e8d0b1a55')
-    expect(errors).toEqual([])
+    // The one expected failure: the fetch refused above, which the browser logs.
+    expect(errors.filter((e) => !e.includes('status of 409'))).toEqual([])
   } finally {
     server.kill()
   }

@@ -205,6 +205,39 @@ export default {
           notes.push(`${t.app}: no project with the key ${p.key.slice(0, 10)}… on ${order.join(', ') || 'options.hosts (empty)'}${list.length > 1 ? ` with any of the ${list.length} keys` : ''}${sent && !hosts.includes(likely) ? `; its events go to ${sent}${INGESTION[sent] ? `, so add ${likely} to options.hosts` : ''}` : ''}`)
       }
     }
+    // Projects no page showed: by the addresses the project allows (app_urls), for an app with no
+    // PostHog yet; and say which are left.
+    const bare = (h) => String(h ?? '').toLowerCase().replace(/^https?:\/\//, '').replace(/[/:?#].*$/, '').replace(/^www\./, '')
+    const ownerOf = (address) => {
+      const host = bare(address)
+      const serves = (test) => trackers.filter((t) => t.hostnames.some((h) => !h.startsWith('*.') && test(bare(h))))
+      const exact = serves((h) => h === host)
+      const owners = host ? (exact.length ? exact : serves((h) => h.endsWith(`.${host}`))) : []
+      return owners.length === 1 ? owners[0] : undefined
+    }
+    const linked = new Set(sources.map((s) => String(s.source.id)))
+    const withPosthog = new Set(sources.map((s) => s.app))
+    const seen = new Set()
+    for (const host of hosts)
+      for (const k of list) {
+        let projects
+        try {
+          projects = await projectsOn(host, k)
+        } catch {
+          continue
+        }
+        for (const project of projects) {
+          const id = String(project.id)
+          if (linked.has(id) || seen.has(id)) continue
+          seen.add(id)
+          const urls = (project.app_urls ?? []).filter(Boolean)
+          const owner = urls.map(ownerOf).find(Boolean)
+          if (owner && !withPosthog.has(owner.app) && !owner.posthog.length) {
+            sources.push({ app: owner.app, source: { provider: 'posthog', id: project.id, ...(host !== hosts[0] ? { host } : {}) } })
+            withPosthog.add(owner.app)
+          } else notes.push(`project ${project.name ?? id} (${id}) on ${host}, ${k.label}: ${owner ? `${owner.app} already has its PostHog source` : urls.length ? `no app lists ${urls.map(bare).join(', ')}` : 'no app loads its key, and it lists no addresses'}`)
+        }
+      }
     return { sources, notes: [...new Set(notes)] }
   },
 }

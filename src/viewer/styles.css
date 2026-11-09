@@ -3163,8 +3163,8 @@ a.tsite {
 /* Period picker: presets, ranges fetched before, and a custom range in malha dev. */
 .period {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 10px;
   margin-bottom: 20px;
 }
@@ -3203,6 +3203,155 @@ a.tsite {
 .period__hint {
   font-size: 12px;
   color: var(--text-3);
+}
+
+.period__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.period__panel {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 640px;
+  padding: 14px 16px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 3px;
+  background: var(--bg-1);
+}
+
+.period__shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.period__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.period__summary {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+/* Range calendar: two months, the range filled in, its first and last day in the accent. */
+.cal {
+  --cal-range: rgb(72 213 151 / 0.16);
+  position: relative;
+}
+
+.cal__nav {
+  position: absolute;
+  top: -2px;
+  right: 0;
+  display: flex;
+  gap: 4px;
+}
+
+.cal__step {
+  width: 26px;
+  height: 24px;
+  border: 1px solid var(--stroke-2);
+  border-radius: 3px;
+  background: var(--bg-1);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.cal__step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cal__months {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.cal__title {
+  height: 24px;
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  line-height: 24px;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px 0;
+}
+
+.cal__weekday {
+  padding: 4px 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: center;
+  color: var(--text-3);
+}
+
+.cal__day {
+  height: 32px;
+  border: none;
+  background: none;
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cal__day:hover:not(:disabled) {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.cal__day:disabled {
+  color: var(--text-3);
+  opacity: 0.4;
+  cursor: default;
+}
+
+.cal__day.is-inside {
+  background: var(--cal-range);
+}
+
+.cal__day.is-edge {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.chart__hint {
+  margin-left: auto;
+  color: var(--text-3);
+}
+
+.chart__plot--brush {
+  cursor: crosshair;
+  user-select: none;
+}
+
+.chart__band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent-bg);
+  border-left: 1px solid var(--accent);
+  border-right: 1px solid var(--accent);
+  pointer-events: none;
 }
 
 /* A site's page. */

@@ -66,6 +66,19 @@ function everyDay(range, byDay, zero) {
   return out
 }
 
+const bare = (h) => String(h ?? '').toLowerCase().replace(/^https?:\/\//, '').replace(/[/:?#].*$/, '').replace(/^www\./, '')
+
+/** The app that serves an address: the one listing its hostname, else the one app listing
+ *  something under it. */
+function ownerOf(trackers, address) {
+  const host = bare(address)
+  if (!host) return undefined
+  const serves = (test) => trackers.filter((t) => t.hostnames.some((h) => !h.startsWith('*.') && test(bare(h))))
+  const exact = serves((h) => h === host)
+  const owners = exact.length ? exact : serves((h) => h.endsWith(`.${host}`))
+  return owners.length === 1 ? owners[0] : undefined
+}
+
 /** Runs `fn` over `items`, `n` at a time. */
 async function pool(items, n, fn) {
   const out = new Array(items.length)
@@ -173,20 +186,33 @@ export default {
     const notes = []
 
     // GA4: measurement id on the page → the property whose web stream has it.
-    const wanted = new Set(trackers.flatMap((t) => t.ga4))
-    if (wanted.size) {
-      const byMeasurement = new Map()
-      const summaries = await call(ctx, token, 'GET', `${ADMIN}/accountSummaries?pageSize=200`)
-      for (const account of summaries.accountSummaries ?? [])
-        for (const p of account.propertySummaries ?? []) {
-          const streams = await call(ctx, token, 'GET', `${ADMIN}/${p.property}/dataStreams?pageSize=200`)
-          for (const s of streams.dataStreams ?? []) if (s.webStreamData?.measurementId) byMeasurement.set(s.webStreamData.measurementId, propertyId(p.property))
-        }
-      for (const t of trackers)
-        for (const g of t.ga4) {
-          if (byMeasurement.has(g)) sources.push({ app: t.app, source: { provider: 'ga4', id: byMeasurement.get(g) } })
-          else notes.push(`${t.app}: ${key.client_email} cannot see the GA4 property for ${g}; add it as a Viewer`)
-        }
+    const byMeasurement = new Map()
+    const properties = new Map()
+    const summaries = await call(ctx, token, 'GET', `${ADMIN}/accountSummaries?pageSize=200`)
+    for (const account of summaries.accountSummaries ?? [])
+      for (const p of account.propertySummaries ?? []) {
+        const id = propertyId(p.property)
+        const streams = (await call(ctx, token, 'GET', `${ADMIN}/${p.property}/dataStreams?pageSize=200`)).dataStreams ?? []
+        properties.set(id, { name: p.displayName ?? id, uris: streams.map((s) => s.webStreamData?.defaultUri).filter(Boolean) })
+        for (const s of streams) if (s.webStreamData?.measurementId) byMeasurement.set(s.webStreamData.measurementId, id)
+      }
+    const linked = new Set()
+    for (const t of trackers)
+      for (const g of t.ga4) {
+        if (byMeasurement.has(g)) {
+          sources.push({ app: t.app, source: { provider: 'ga4', id: byMeasurement.get(g) } })
+          linked.add(byMeasurement.get(g))
+        } else notes.push(`${t.app}: ${key.client_email} cannot see the GA4 property for ${g}; add it as a Viewer`)
+      }
+    // Properties no page showed: by their web stream's address, for an app with no GA4 yet.
+    const withGa4 = new Set(sources.filter((s) => s.source.provider === 'ga4').map((s) => s.app))
+    for (const [id, p] of properties) {
+      if (linked.has(id)) continue
+      const owner = p.uris.map((u) => ownerOf(trackers, u)).find(Boolean)
+      if (owner && !withGa4.has(owner.app) && !owner.ga4.length) {
+        sources.push({ app: owner.app, source: { provider: 'ga4', id } })
+        withGa4.add(owner.app)
+      } else notes.push(`GA4 property ${p.name} (${id}${p.uris.length ? `, ${p.uris.join(', ')}` : ''}): ${owner ? `${owner.app} already has its GA4 source; add it by hand if this one is right` : 'no app lists its address'}`)
     }
 
     // Search Console: each property goes to the app that owns its domain (or the URL's host).
@@ -202,6 +228,7 @@ export default {
       const pick = apex.length === 1 ? apex[0] : candidates.length === 1 ? candidates[0] : undefined
       if (pick) sources.push({ app: pick.app, source: { provider: 'search-console', id: url } })
       else if (candidates.length) notes.push(`Search Console ${url}: serves ${candidates.map((t) => t.app).join(', ')}; add it to the right app by hand`)
+      else notes.push(`Search Console ${url}: no app lists this domain`)
     }
     return { sources, notes }
   },
